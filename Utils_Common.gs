@@ -214,3 +214,160 @@ function verifyFunctionsRemoved() {
     console.log("\n⚠️ ยังมีฟังก์ชันที่ลบไม่สำเร็จ ตรวจสอบอีกครั้งครับ");
   }
 }
+
+// ====================================================
+// [Phase B NEW] Row Adapter Helpers
+// แปลง raw array ↔ object เพื่อลด magic number
+// ====================================================
+
+/**
+ * Database sheet
+ */
+function dbRowToObject(row) {
+  if (!row) return null;
+  return {
+    name:             row[CONFIG.C_IDX.NAME],
+    lat:              row[CONFIG.C_IDX.LAT],
+    lng:              row[CONFIG.C_IDX.LNG],
+    suggested:        row[CONFIG.C_IDX.SUGGESTED],
+    confidence:       row[CONFIG.C_IDX.CONFIDENCE],
+    normalized:       row[CONFIG.C_IDX.NORMALIZED],
+    verified:         row[CONFIG.C_IDX.VERIFIED],
+    sysAddr:          row[CONFIG.C_IDX.SYS_ADDR],
+    googleAddr:       row[CONFIG.C_IDX.GOOGLE_ADDR],
+    distKm:           row[CONFIG.C_IDX.DIST_KM],
+    uuid:             row[CONFIG.C_IDX.UUID],
+    province:         row[CONFIG.C_IDX.PROVINCE],
+    district:         row[CONFIG.C_IDX.DISTRICT],
+    postcode:         row[CONFIG.C_IDX.POSTCODE],
+    quality:          row[CONFIG.C_IDX.QUALITY],
+    created:          row[CONFIG.C_IDX.CREATED],
+    updated:          row[CONFIG.C_IDX.UPDATED],
+    coordSource:      row[CONFIG.C_IDX.COORD_SOURCE],
+    coordConfidence:  row[CONFIG.C_IDX.COORD_CONFIDENCE],
+    coordLastUpdated: row[CONFIG.C_IDX.COORD_LAST_UPDATED],
+    recordStatus:     row[CONFIG.C_IDX.RECORD_STATUS],
+    mergedToUuid:     row[CONFIG.C_IDX.MERGED_TO_UUID]
+  };
+}
+
+function dbObjectToRow(obj) {
+  var row = new Array(CONFIG.DB_TOTAL_COLS).fill("");
+  row[CONFIG.C_IDX.NAME]               = obj.name             || "";
+  row[CONFIG.C_IDX.LAT]                = obj.lat              || "";
+  row[CONFIG.C_IDX.LNG]                = obj.lng              || "";
+  row[CONFIG.C_IDX.SUGGESTED]          = obj.suggested        || "";
+  row[CONFIG.C_IDX.CONFIDENCE]         = obj.confidence       || "";
+  row[CONFIG.C_IDX.NORMALIZED]         = obj.normalized       || "";
+  row[CONFIG.C_IDX.VERIFIED]           = obj.verified         || false;
+  row[CONFIG.C_IDX.SYS_ADDR]           = obj.sysAddr          || "";
+  row[CONFIG.C_IDX.GOOGLE_ADDR]        = obj.googleAddr       || "";
+  row[CONFIG.C_IDX.DIST_KM]            = obj.distKm           || "";
+  row[CONFIG.C_IDX.UUID]               = obj.uuid             || "";
+  row[CONFIG.C_IDX.PROVINCE]           = obj.province         || "";
+  row[CONFIG.C_IDX.DISTRICT]           = obj.district         || "";
+  row[CONFIG.C_IDX.POSTCODE]           = obj.postcode         || "";
+  row[CONFIG.C_IDX.QUALITY]            = obj.quality          || 0;
+  row[CONFIG.C_IDX.CREATED]            = obj.created          || "";
+  row[CONFIG.C_IDX.UPDATED]            = obj.updated          || "";
+  row[CONFIG.C_IDX.COORD_SOURCE]       = obj.coordSource      || "";
+  row[CONFIG.C_IDX.COORD_CONFIDENCE]   = obj.coordConfidence  || 0;
+  row[CONFIG.C_IDX.COORD_LAST_UPDATED] = obj.coordLastUpdated || "";
+  row[CONFIG.C_IDX.RECORD_STATUS]      = obj.recordStatus     || "Active";
+  row[CONFIG.C_IDX.MERGED_TO_UUID]     = obj.mergedToUuid     || "";
+  return row;
+}
+
+/**
+ * NameMapping sheet
+ */
+function mapRowToObject(row) {
+  if (!row) return null;
+  return {
+    variant:    row[CONFIG.MAP_IDX.VARIANT],
+    uid:        row[CONFIG.MAP_IDX.UID],
+    confidence: row[CONFIG.MAP_IDX.CONFIDENCE],
+    mappedBy:   row[CONFIG.MAP_IDX.MAPPED_BY],
+    timestamp:  row[CONFIG.MAP_IDX.TIMESTAMP]
+  };
+}
+
+function mapObjectToRow(obj) {
+  var row = new Array(CONFIG.MAP_TOTAL_COLS).fill("");
+  row[CONFIG.MAP_IDX.VARIANT]    = obj.variant    || "";
+  row[CONFIG.MAP_IDX.UID]        = obj.uid         || "";
+  row[CONFIG.MAP_IDX.CONFIDENCE] = obj.confidence  || 100;
+  row[CONFIG.MAP_IDX.MAPPED_BY]  = obj.mappedBy    || "";
+  row[CONFIG.MAP_IDX.TIMESTAMP]  = obj.timestamp   || new Date();
+  return row;
+}
+
+/**
+ * GPS_Queue sheet
+ */
+function queueRowToObject(row) {
+  if (!row) return null;
+  return {
+    timestamp:    row[0],
+    shipToName:   row[1],
+    uuidDb:       row[2],
+    latLngDriver: row[3],
+    latLngDb:     row[4],
+    diffMeters:   row[5],
+    reason:       row[6],
+    approve:      row[7],
+    reject:       row[8]
+  };
+}
+
+function queueObjectToRow(obj) {
+  return [
+    obj.timestamp    || "",
+    obj.shipToName   || "",
+    obj.uuidDb       || "",
+    obj.latLngDriver || "",
+    obj.latLngDb     || "",
+    obj.diffMeters   || "",
+    obj.reason       || "",
+    obj.approve      || false,
+    obj.reject       || false
+  ];
+}
+
+/**
+ * Data sheet (Daily Job)
+ */
+function dailyJobRowToObject(row) {
+  if (!row) return null;
+  return {
+    jobId:          row[DATA_IDX.JOB_ID],
+    planDelivery:   row[DATA_IDX.PLAN_DELIVERY],
+    invoiceNo:      row[DATA_IDX.INVOICE_NO],
+    shipmentNo:     row[DATA_IDX.SHIPMENT_NO],
+    driverName:     row[DATA_IDX.DRIVER_NAME],
+    truckLicense:   row[DATA_IDX.TRUCK_LICENSE],
+    carrierCode:    row[DATA_IDX.CARRIER_CODE],
+    carrierName:    row[DATA_IDX.CARRIER_NAME],
+    soldToCode:     row[DATA_IDX.SOLD_TO_CODE],
+    soldToName:     row[DATA_IDX.SOLD_TO_NAME],
+    shipToName:     row[DATA_IDX.SHIP_TO_NAME],
+    shipToAddr:     row[DATA_IDX.SHIP_TO_ADDR],
+    latLngScg:      row[DATA_IDX.LATLNG_SCG],
+    material:       row[DATA_IDX.MATERIAL],
+    qty:            row[DATA_IDX.QTY],
+    qtyUnit:        row[DATA_IDX.QTY_UNIT],
+    weight:         row[DATA_IDX.WEIGHT],
+    deliveryNo:     row[DATA_IDX.DELIVERY_NO],
+    destCount:      row[DATA_IDX.DEST_COUNT],
+    destList:       row[DATA_IDX.DEST_LIST],
+    scanStatus:     row[DATA_IDX.SCAN_STATUS],
+    deliveryStatus: row[DATA_IDX.DELIVERY_STATUS],
+    email:          row[DATA_IDX.EMAIL],
+    totQty:         row[DATA_IDX.TOT_QTY],
+    totWeight:      row[DATA_IDX.TOT_WEIGHT],
+    scanInv:        row[DATA_IDX.SCAN_INV],
+    latLngActual:   row[DATA_IDX.LATLNG_ACTUAL],
+    ownerLabel:     row[DATA_IDX.OWNER_LABEL],
+    shopKey:        row[DATA_IDX.SHOP_KEY]
+  };
+}
