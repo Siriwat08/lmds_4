@@ -26,6 +26,56 @@ function getRealLastRow_(sheet, columnIndex) {
   return 1; // ถ้าชีตว่างเปล่าเลย
 }
 
+/**
+ * [Phase C] Mapping Repository Helpers
+ * ใช้ร่วมกันระหว่าง finalize, repair, และ sync
+ */
+
+function loadDatabaseIndexByUUID_() {
+  var ss      = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet   = ss.getSheetByName(CONFIG.SHEET_NAME);
+  var lastRow = getRealLastRow_(sheet, CONFIG.COL_NAME);
+  var result  = {};
+  if (lastRow < 2) return result;
+
+  var data = sheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).getValues();
+  data.forEach(function(row, i) {
+    var uuid = row[CONFIG.C_IDX.UUID];
+    if (uuid) result[uuid] = i;
+  });
+  return result;
+}
+
+function loadDatabaseIndexByNormalizedName_() {
+  var ss      = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet   = ss.getSheetByName(CONFIG.SHEET_NAME);
+  var lastRow = getRealLastRow_(sheet, CONFIG.COL_NAME);
+  var result  = {};
+  if (lastRow < 2) return result;
+
+  var data = sheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).getValues();
+  data.forEach(function(row, i) {
+    var name = row[CONFIG.C_IDX.NAME];
+    if (name) result[normalizeText(name)] = i;
+  });
+  return result;
+}
+
+function loadNameMappingRows_() {
+  var ss       = SpreadsheetApp.getActiveSpreadsheet();
+  var mapSheet = ss.getSheetByName(CONFIG.MAPPING_SHEET);
+  if (!mapSheet || mapSheet.getLastRow() < 2) return [];
+  return mapSheet.getRange(2, 1, mapSheet.getLastRow() - 1, CONFIG.MAP_TOTAL_COLS).getValues();
+}
+
+function appendNameMappings_(rows) {
+  if (!rows || rows.length === 0) return;
+  var ss       = SpreadsheetApp.getActiveSpreadsheet();
+  var mapSheet = ss.getSheetByName(CONFIG.MAPPING_SHEET);
+  var lastRow  = mapSheet.getLastRow();
+  mapSheet.getRange(lastRow + 1, 1, rows.length, CONFIG.MAP_TOTAL_COLS).setValues(rows);
+}
+
 function syncNewDataToMaster() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ui = SpreadsheetApp.getUi();
@@ -411,109 +461,133 @@ function resetDeepCleanMemory() {
   SpreadsheetApp.getActiveSpreadsheet().toast("🔄 Memory Reset: ระบบถูกรีเซ็ต จะเริ่มตรวจสอบแถวที่ 2 ในรอบถัดไป", "System Ready");
 }
 
+/**
+ * [Phase B FIXED] finalizeAndClean_MoveToMapping()
+ * เปลี่ยน hardcode 17 → CONFIG.DB_TOTAL_COLS
+ */
+
+/**
+ * [Phase C FIXED] finalizeAndClean_MoveToMapping()
+ * แยกเป็น 3 step: collect → build → rewrite
+ * เพิ่ม conflict report ก่อน finalize
+ */
 function finalizeAndClean_MoveToMapping() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ui = SpreadsheetApp.getUi();
-  
+
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) { 
+  if (!lock.tryLock(30000)) {
     ui.alert("⚠️ ระบบคิวทำงาน", "มีผู้ใช้งานอื่นกำลังแก้ไขฐานข้อมูล กรุณารอสักครู่", ui.ButtonSet.OK);
     return;
   }
 
   try {
     var masterSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-    var mapSheet = ss.getSheetByName(CONFIG.MAPPING_SHEET);
-    
-    if (!masterSheet || !mapSheet) { 
-      ui.alert("❌ Error: Missing Sheets"); 
-      return; 
-    }
-    
-    // [FIXED v4.1] ใช้ getRealLastRow_ แทน getLastRow()
-    // เพราะ VERIFIED column มี Checkbox เตรียมไว้ล่วงหน้า
-    // ทำให้ getLastRow() คืนค่าผิด
-    var lastRow = getRealLastRow_(masterSheet, CONFIG.COL_NAME);
-    
-    if (lastRow < 2) { 
-      ui.alert("ℹ️ Database is empty."); 
-      return; 
-    }
+    var mapSheet    = ss.getSheetByName(CONFIG.MAPPING_SHEET);
+    if (!masterSheet || !mapSheet) { ui.alert("❌ Error: Missing Sheets"); return; }
 
-    var allData = masterSheet.getRange(2, 1, lastRow - 1, 17).getValues();
-    var uuidMap = {};
-    
+    var lastRow = getRealLastRow_(masterSheet, CONFIG.COL_NAME);
+    if (lastRow < 2) { ui.alert("ℹ️ Database is empty."); return; }
+
+    var allData = masterSheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).getValues();
+
+    // ─── Step 1: Collect ──────────────────────────────────────────────
+    var uuidMap       = {};
+    var conflicts     = [];
+    var uuidNameIndex = {};
+
     allData.forEach(function(row) {
       var uuid = row[CONFIG.C_IDX.UUID];
+      var name = row[CONFIG.C_IDX.NAME];
+      var sugg = row[CONFIG.C_IDX.SUGGESTED];
       if (uuid) {
-        var n = normalizeText(row[CONFIG.C_IDX.NAME]);
-        var s = normalizeText(row[CONFIG.C_IDX.SUGGESTED]);
-        if (n) uuidMap[n] = uuid;
-        if (s) uuidMap[s] = uuid;
+        uuidMap[normalizeText(name)] = uuid;
+        if (sugg) uuidMap[normalizeText(sugg)] = uuid;
+        // ตรวจ UUID ซ้ำ
+        if (uuidNameIndex[uuid]) {
+          conflicts.push("UUID ซ้ำ: " + uuid + " พบทั้ง '" + uuidNameIndex[uuid] + "' และ '" + name + "'");
+        } else {
+          uuidNameIndex[uuid] = name;
+        }
       }
     });
 
-    var backupName = "Backup_DB_" + Utilities.formatDate(new Date(), "GMT+7", "yyyyMMdd_HHmm");
-    masterSheet.copyTo(ss).setName(backupName);
+    // แสดง conflict report ถ้ามี
+    if (conflicts.length > 0) {
+      var conflictMsg = "⚠️ พบ conflict ก่อน Finalize:\n\n" +
+                        conflicts.slice(0, 5).join("\n") +
+                        (conflicts.length > 5 ? "\n...และอีก " + (conflicts.length - 5) + " รายการ" : "") +
+                        "\n\nต้องการดำเนินการต่อหรือไม่?";
+      var proceed = ui.alert("⚠️ Finalize Conflicts", conflictMsg, ui.ButtonSet.YES_NO);
+      if (proceed !== ui.Button.YES) return;
+    }
 
-    var rowsToKeep = [];       
-    var mappingToUpload = []; 
-    var processedNames = new Set(); 
+    // ─── Step 2: Build Mapping Rows ───────────────────────────────────
+    var rowsToKeep      = [];
+    var mappingToUpload = [];
+    var processedNames  = new Set();
 
     for (var i = 0; i < allData.length; i++) {
-      var row = allData[i];
-      var rawName = row[CONFIG.C_IDX.NAME];
+      var row           = allData[i];
+      var rawName       = row[CONFIG.C_IDX.NAME];
       var suggestedName = row[CONFIG.C_IDX.SUGGESTED];
-      var isVerified = row[CONFIG.C_IDX.VERIFIED];    
-      var currentUUID = row[CONFIG.C_IDX.UUID];
+      var isVerified    = row[CONFIG.C_IDX.VERIFIED];
+      var currentUUID   = row[CONFIG.C_IDX.UUID];
 
       if (isVerified === true) {
-        rowsToKeep.push(row); 
-      } 
-      else if (suggestedName && suggestedName !== "") {
+        rowsToKeep.push(row);
+      } else if (suggestedName && suggestedName !== "") {
         if (rawName !== suggestedName && !processedNames.has(rawName)) {
           var targetUUID = uuidMap[normalizeText(suggestedName)] || currentUUID;
-          var mapRow = new Array(5).fill("");
-          mapRow[CONFIG.MAP_IDX.VARIANT] = rawName;
-          mapRow[CONFIG.MAP_IDX.UID] = targetUUID;
-          mapRow[CONFIG.MAP_IDX.CONFIDENCE] = 100;
-          mapRow[CONFIG.MAP_IDX.MAPPED_BY] = "Human";
-          mapRow[CONFIG.MAP_IDX.TIMESTAMP] = new Date();
-          
-          mappingToUpload.push(mapRow);
-          processedNames.add(rawName);
+
+          // [Phase C] ตรวจว่า targetUUID ยัง active อยู่
+          if (!targetUUID) {
+            console.warn("[finalizeAndClean] '" + rawName + "' ไม่มี target UUID ข้ามไป");
+          } else {
+            mappingToUpload.push(mapObjectToRow({
+              variant:    rawName,
+              uid:        targetUUID,
+              confidence: 100,
+              mappedBy:   "Human",
+              timestamp:  new Date()
+            }));
+            processedNames.add(rawName);
+          }
         }
       }
     }
 
+    // ─── Step 3: Rewrite ──────────────────────────────────────────────
+    var backupName = "Backup_DB_" + Utilities.formatDate(new Date(), "GMT+7", "yyyyMMdd_HHmm");
+    masterSheet.copyTo(ss).setName(backupName);
+    console.log("[finalizeAndClean] Backup created: " + backupName);
+
     if (mappingToUpload.length > 0) {
-      var lastRowMap = mapSheet.getLastRow();
-      mapSheet.getRange(lastRowMap + 1, 1, mappingToUpload.length, 5).setValues(mappingToUpload);
+      appendNameMappings_(mappingToUpload);
     }
 
-    // [FIXED v4.1] ล้างข้อมูลเดิมทั้งหมด
-    masterSheet.getRange(2, 1, lastRow - 1, 17).clearContent();
-    
-    if (rowsToKeep.length > 0) {
-      masterSheet.getRange(2, 1, rowsToKeep.length, 17).setValues(rowsToKeep);
+    masterSheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).clearContent();
 
-      // [FIXED v4.1] ลบ ghost rows ออกจริงๆ ด้วย deleteRows
+    if (rowsToKeep.length > 0) {
+      masterSheet.getRange(2, 1, rowsToKeep.length, CONFIG.DB_TOTAL_COLS).setValues(rowsToKeep);
       var ghostStart = rowsToKeep.length + 2;
       var ghostCount = lastRow - 1 - rowsToKeep.length;
-      if (ghostCount > 0) {
-        masterSheet.deleteRows(ghostStart, ghostCount);
-      }
-
-      // [FIXED v4.1] บังคับให้ getLastRow() คืนค่าถูกต้องในรอบถัดไป
+      if (ghostCount > 0) masterSheet.deleteRows(ghostStart, ghostCount);
       SpreadsheetApp.flush();
-
-      ui.alert("✅ Finalize Complete:\n- New Mappings: " + mappingToUpload.length + "\n- Active Master Data: " + rowsToKeep.length);
+      if (typeof clearSearchCache === 'function') clearSearchCache();
+      ui.alert(
+        "✅ Finalize Complete!\n\n" +
+        "📋 New Mappings: " + mappingToUpload.length + "\n" +
+        "✅ Active Master Data: " + rowsToKeep.length + "\n" +
+        "⚠️ Conflicts detected: " + conflicts.length
+      );
     } else {
-      masterSheet.getRange(2, 1, allData.length, 17).setValues(allData);
-      ui.alert("⚠️ Warning: No Verified rows found. Data restored to original state.");
+      masterSheet.getRange(2, 1, allData.length, CONFIG.DB_TOTAL_COLS).setValues(allData);
+      ui.alert("⚠️ Warning: No Verified rows found. Data restored.");
     }
-  } catch (e) {
-    console.error("Finalize Error: " + e.message);
+
+  } catch(e) {
+    console.error("[finalizeAndClean] Error: " + e.message);
     ui.alert("❌ CRITICAL WRITE ERROR: " + e.message + "\nPlease check Backup Sheet.");
   } finally {
     lock.releaseLock();
@@ -832,172 +906,113 @@ function fixCheckboxOverflow() {
   );
 }
 
+/**
+ * [Phase B FIXED] recalculateAllConfidence()
+ * เปลี่ยน hardcode 17 → CONFIG.DB_TOTAL_COLS
+ */
 function recalculateAllConfidence() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var ui = SpreadsheetApp.getUi();
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var ui    = SpreadsheetApp.getUi();
   var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  
+
   var lastRow = getRealLastRow_(sheet, CONFIG.COL_NAME);
   if (lastRow < 2) return;
-  
-  var data = sheet.getRange(2, 1, lastRow - 1, 17).getValues();
+
+  // [Phase B] ใช้ DB_TOTAL_COLS
+  var maxCol       = CONFIG.DB_TOTAL_COLS;
+  var data         = sheet.getRange(2, 1, lastRow - 1, maxCol).getValues();
   var updatedCount = 0;
-  
+
   data.forEach(function(row, i) {
-    var name     = row[CONFIG.C_IDX.NAME];
-    var lat      = parseFloat(row[CONFIG.C_IDX.LAT]);
-    var lng      = parseFloat(row[CONFIG.C_IDX.LNG]);
-    var verified = row[CONFIG.C_IDX.VERIFIED];
-    
-    if (!name) return;
-    
-    // ปัจจัย 1: Verified = true → 40%
-    var verifiedScore = (verified === true) ? 40 : 0;
-    
-    // ปัจจัย 2: มีพิกัดครบ → 20%
-    var coordScore = (!isNaN(lat) && !isNaN(lng)) ? 20 : 0;
-    
-    // ปัจจัย 3: มีที่อยู่จาก Google → 10%
-    var addrScore = row[CONFIG.C_IDX.GOOGLE_ADDR] ? 10 : 0;
-    
-    // ปัจจัย 4: มี Province/District → 10%
-    var geoScore = (row[CONFIG.C_IDX.PROVINCE] && 
-                    row[CONFIG.C_IDX.DISTRICT]) ? 10 : 0;
-    
-    // ปัจจัย 5: มี UUID → 10%
-    var uuidScore = row[CONFIG.C_IDX.UUID] ? 10 : 0;
-    
-    // ปัจจัย 6: Coord_Source = Driver_GPS → 10%
-    var sourceScore = 0;
-    if (row.length > CONFIG.C_IDX.COORD_SOURCE) {
-      sourceScore = (row[CONFIG.C_IDX.COORD_SOURCE] === "Driver_GPS") ? 10 : 0;
-    }
-    
-    var newConfidence = Math.min(
-      verifiedScore + coordScore + addrScore + 
-      geoScore + uuidScore + sourceScore, 
-      100
-    );
-    
-    var oldConfidence = row[CONFIG.C_IDX.CONFIDENCE];
-    
-    if (oldConfidence !== newConfidence) {
-      data[i][CONFIG.C_IDX.CONFIDENCE] = newConfidence;
+    if (!row[CONFIG.C_IDX.NAME]) return;
+
+    var verifiedScore = (row[CONFIG.C_IDX.VERIFIED] === true) ? 40 : 0;
+    var lat           = parseFloat(row[CONFIG.C_IDX.LAT]);
+    var lng           = parseFloat(row[CONFIG.C_IDX.LNG]);
+    var coordScore    = (!isNaN(lat) && !isNaN(lng)) ? 20 : 0;
+    var addrScore     = row[CONFIG.C_IDX.GOOGLE_ADDR] ? 10 : 0;
+    var geoScore      = (row[CONFIG.C_IDX.PROVINCE] && row[CONFIG.C_IDX.DISTRICT]) ? 10 : 0;
+    var uuidScore     = row[CONFIG.C_IDX.UUID] ? 10 : 0;
+    var sourceScore   = (row[CONFIG.C_IDX.COORD_SOURCE] === "Driver_GPS") ? 10 : 0;
+
+    var newConf = Math.min(verifiedScore + coordScore + addrScore + geoScore + uuidScore + sourceScore, 100);
+    if (row[CONFIG.C_IDX.CONFIDENCE] !== newConf) {
+      data[i][CONFIG.C_IDX.CONFIDENCE] = newConf;
       updatedCount++;
     }
   });
-  
+
   if (updatedCount > 0) {
-    sheet.getRange(2, 1, data.length, 17).setValues(data);
+    sheet.getRange(2, 1, data.length, maxCol).setValues(data);
     SpreadsheetApp.flush();
   }
-  
-  ui.alert(
-    "✅ คำนวณ Confidence ใหม่เสร็จแล้ว!\n\n" +
-    "อัปเดต: " + updatedCount + " แถว\n\n" +
-    "เกณฑ์การให้คะแนน:\n" +
-    "✅ Verified = true    → +40%\n" +
-    "📍 มีพิกัด LAT/LNG   → +20%\n" +
-    "🗺️ มีที่อยู่ Google  → +10%\n" +
-    "🏙️ มี Province/District → +10%\n" +
-    "🔑 มี UUID           → +10%\n" +
-    "🚗 Driver_GPS        → +10%"
-  );
-  
-  // แสดงผลหลังคำนวณ
-  testConfidenceScore();
-}
 
-function recalculateAllQuality() {
-  var ss  = SpreadsheetApp.getActiveSpreadsheet();
-  var ui  = SpreadsheetApp.getUi();
-  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  ui.alert("✅ คำนวณ Confidence ใหม่เสร็จ!\nอัปเดต: " + updatedCount + " แถว");
+}
   
+
+/**
+ * [Phase B FIXED] recalculateAllQuality()
+ * เปลี่ยน hardcode 17 → CONFIG.DB_TOTAL_COLS
+ */
+function recalculateAllQuality() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var ui    = SpreadsheetApp.getUi();
+  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+
   var lastRow = getRealLastRow_(sheet, CONFIG.COL_NAME);
   if (lastRow < 2) return;
-  
-  var data = sheet.getRange(2, 1, lastRow - 1, 17).getValues();
+
+  // [Phase B] ใช้ DB_TOTAL_COLS
+  var data         = sheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).getValues();
   var updatedCount = 0;
-  
+
   data.forEach(function(row, i) {
     var name = row[CONFIG.C_IDX.NAME];
     if (!name) return;
-    
+
     var qualityScore = 0;
-    
-    // ชื่อ (+10)
     if (name.toString().length >= 3) qualityScore += 10;
-    
-    // พิกัด (+20)
+
     var lat = parseFloat(row[CONFIG.C_IDX.LAT]);
     var lng = parseFloat(row[CONFIG.C_IDX.LNG]);
     if (!isNaN(lat) && !isNaN(lng)) {
       qualityScore += 20;
-      // อยู่ในไทย (+10)
-      if (lat >= 6 && lat <= 21 && lng >= 97 && lng <= 106) {
-        qualityScore += 10;
-      }
+      if (lat >= 6 && lat <= 21 && lng >= 97 && lng <= 106) qualityScore += 10;
     }
-    
-    // ที่อยู่จาก Google (+15)
-    if (row[CONFIG.C_IDX.GOOGLE_ADDR]) qualityScore += 15;
-    
-    // Province/District (+10)
-    if (row[CONFIG.C_IDX.PROVINCE] && row[CONFIG.C_IDX.DISTRICT]) {
-      qualityScore += 10;
-    }
-    
-    // Postcode (+5)
-    if (row[CONFIG.C_IDX.POSTCODE]) qualityScore += 5;
-    
-    // UUID (+10)
-    if (row[CONFIG.C_IDX.UUID]) qualityScore += 10;
-    
-    // Verified (+20)
-    if (row[CONFIG.C_IDX.VERIFIED] === true) qualityScore += 20;
-    
+    if (row[CONFIG.C_IDX.GOOGLE_ADDR])                         qualityScore += 15;
+    if (row[CONFIG.C_IDX.PROVINCE] && row[CONFIG.C_IDX.DISTRICT]) qualityScore += 10;
+    if (row[CONFIG.C_IDX.POSTCODE])                            qualityScore += 5;
+    if (row[CONFIG.C_IDX.UUID])                                qualityScore += 10;
+    if (row[CONFIG.C_IDX.VERIFIED] === true)                   qualityScore += 20;
+
     var newQuality = Math.min(qualityScore, 100);
-    
     if (row[CONFIG.C_IDX.QUALITY] !== newQuality) {
       data[i][CONFIG.C_IDX.QUALITY] = newQuality;
       updatedCount++;
     }
   });
-  
+
   if (updatedCount > 0) {
-    sheet.getRange(2, 1, data.length, 17).setValues(data);
+    sheet.getRange(2, 1, data.length, CONFIG.DB_TOTAL_COLS).setValues(data);
     SpreadsheetApp.flush();
   }
-  
-  // สรุปผล
-  var stats = { total: 0, high: 0, mid: 0, low: 0, zero: 0 };
+
+  var stats = { total: 0, high: 0, mid: 0, low: 0 };
   data.forEach(function(row) {
     var q = parseFloat(row[CONFIG.C_IDX.QUALITY]);
     if (isNaN(q) || !row[CONFIG.C_IDX.NAME]) return;
     stats.total++;
     if (q >= 80)      stats.high++;
     else if (q >= 50) stats.mid++;
-    else if (q > 0)   stats.low++;
-    else              stats.zero++;
+    else              stats.low++;
   });
-  
+
   ui.alert(
-    "✅ คำนวณ Quality Score เสร็จแล้ว!\n\n" +
-    "อัปเดต: " + updatedCount + " แถว\n\n" +
-    "📊 สรุป Quality:\n" +
-    "🟢 ≥ 80% (ดีมาก): "      + stats.high  + " แถว\n" +
-    "🟡 50-79% (ดีพอใช้): "   + stats.mid   + " แถว\n" +
-    "🔴 1-49% (ต้องปรับปรุง): " + stats.low  + " แถว\n" +
-    "⚫ 0% (ยังไม่คำนวณ): "    + stats.zero  + " แถว\n\n" +
-    "เกณฑ์:\n" +
-    "✅ Verified         → +20%\n" +
-    "📍 มีพิกัด         → +20%\n" +
-    "🌏 พิกัดอยู่ในไทย  → +10%\n" +
-    "🗺️ ที่อยู่ Google  → +15%\n" +
-    "🏙️ Province/District → +10%\n" +
-    "📮 Postcode        → +5%\n" +
-    "🔑 UUID            → +10%\n" +
-    "📝 ชื่อ ≥ 3 ตัว    → +10%"
+    "✅ คำนวณ Quality Score เสร็จแล้ว!\n\nอัปเดต: " + updatedCount + " แถว\n\n" +
+    "🟢 ≥80%: " + stats.high + " แถว\n" +
+    "🟡 50-79%: " + stats.mid  + " แถว\n" +
+    "🔴 <50%: "  + stats.low  + " แถว"
   );
 }
 
