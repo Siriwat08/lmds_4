@@ -7,96 +7,104 @@
  * Author: Elite Logistics Architect
  */
 
+/**
+ * VERSION: 4.2 — Phase E
+ * [Phase E] เพิ่มเมนู Phase D test helpers + Dry Run
+ */
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  
-  // =================================================================
-  // 🚛 เมนูชุดที่ 1: ระบบจัดการ Master Data (Operation)
-  // =================================================================
+
+  // เมนู 1: Master Data
   ui.createMenu('🚛 1. ระบบจัดการ Master Data')
-      .addItem('1️⃣ ดึงลูกค้าใหม่ (Sync New Data)', 'syncNewDataToMaster_UI')
-      .addItem('2️⃣ เติมข้อมูลพิกัด/ที่อยู่ (ทีละ 50)', 'updateGeoData_SmartCache')
-      .addItem('3️⃣ จัดกลุ่มชื่อซ้ำ (Clustering)', 'autoGenerateMasterList_Smart')
-      .addItem('🧠 4️⃣ ส่งชื่อแปลกให้ AI วิเคราะห์ (Smart Resolution)', 'runAIBatchResolver_UI')
-      .addSeparator()
-      .addItem('🚀 5️⃣ Deep Clean (ตรวจสอบความสมบูรณ์)', 'runDeepCleanBatch_100')
-      .addItem('🔄 รีเซ็ตความจำปุ่ม 5 (เริ่มแถว 2 ใหม่)', 'resetDeepCleanMemory_UI')
-      .addSeparator()
-      .addItem('✅ 6️⃣ จบงาน (Finalize & Move to Mapping)', 'finalizeAndClean_UI')
-      .addSeparator()
-      .addSubMenu(ui.createMenu('🛠️ Admin & Repair Tools')
-    .addItem('🔑 สร้าง UUID ให้ครบทุกแถว', 'assignMissingUUIDs')
-    .addItem('🚑 ซ่อมแซม NameMapping (L3)', 'repairNameMapping_UI')
+    .addItem('1️⃣ ดึงลูกค้าใหม่ (Sync New Data)',        'syncNewDataToMaster_UI')
+    .addItem('2️⃣ เติมข้อมูลพิกัด/ที่อยู่ (ทีละ 50)',   'updateGeoData_SmartCache')
+    .addItem('3️⃣ จัดกลุ่มชื่อซ้ำ (Clustering)',         'autoGenerateMasterList_Smart')
+    .addItem('🧠 4️⃣ ส่งชื่อแปลกให้ AI วิเคราะห์',       'runAIBatchResolver_UI')
     .addSeparator()
-    .addItem('🔍 ค้นหาพิกัดซ้ำซ้อน (Hidden Duplicates)', 'findHiddenDuplicates')
-    .addItem('📊 ตรวจสอบคุณภาพข้อมูล (Quality Report)', 'showQualityReport_UI')
-    .addItem('🔄 คำนวณ Quality ใหม่ทั้งหมด', 'recalculateAllQuality')
-    .addItem('🎯 คำนวณ Confidence ใหม่ทั้งหมด', 'recalculateAllConfidence')
+    .addItem('🚀 5️⃣ Deep Clean (ตรวจสอบความสมบูรณ์)',    'runDeepCleanBatch_100')
+    .addItem('🔄 รีเซ็ตความจำปุ่ม 5',                    'resetDeepCleanMemory_UI')
     .addSeparator()
-    .addItem('🗂️ Initialize Record Status', 'initializeRecordStatus')  // ← เพิ่ม
-    .addItem('🔀 Merge UUID ซ้ำซ้อน', 'mergeDuplicates_UI')            // ← เพิ่ม
-    .addItem('📋 ดูสถานะ Record ทั้งหมด', 'showRecordStatusReport')    // ← เพิ่ม
-)
-.addToUi();
-  // =================================================================
-  // 📦 เมนูชุดที่ 2: เมนูพิเศษ SCG (Daily Operation)
-  // =================================================================
- ui.createMenu('📦 2. เมนูพิเศษ SCG') 
-  .addItem('📥 1. โหลดข้อมูล Shipment (+E-POD)', 'fetchDataFromSCGJWD')
-  .addItem('🟢 2. อัปเดตพิกัด + อีเมลพนักงาน', 'applyMasterCoordinatesToDailyJob')
-  .addSeparator()
-  .addSubMenu(ui.createMenu('📍 GPS Queue Management')
-    .addItem('🔄 1. Sync GPS จากคนขับ → Queue', 'syncNewDataToMaster_UI')
-    .addItem('✅ 2. อนุมัติรายการที่ติ๊กแล้ว', 'applyApprovedFeedback')
-    .addItem('📊 3. ดูสถิติ Queue', 'showGPSQueueStats')
+    .addItem('✅ 6️⃣ จบงาน (Finalize & Move to Mapping)', 'finalizeAndClean_UI')
     .addSeparator()
-    .addItem('🛠️ สร้างชีต GPS_Queue ใหม่', 'createGPSQueueSheet')
-  )
-  .addSeparator()
-  .addSubMenu(ui.createMenu('🧹 เมนูล้างข้อมูล (Dangerous Zone)')
-    .addItem('⚠️ ล้างเฉพาะชีต Data', 'clearDataSheet_UI')
-    .addItem('⚠️ ล้างเฉพาะชีต Input', 'clearInputSheet_UI')
-    .addItem('⚠️ ล้างเฉพาะชีต สรุป_เจ้าของสินค้า', 'clearSummarySheet_UI')
-    .addItem('🔥 ล้างทั้งหมด (Input + Data + สรุป)', 'clearAllSCGSheets_UI')
-  )
-  .addToUi();
-  // =================================================================
-  // 🤖 เมนูชุดที่ 3: ระบบอัตโนมัติ (Automation)
-  // =================================================================
+    .addSubMenu(ui.createMenu('🛠️ Admin & Repair Tools')
+      .addItem('🔑 สร้าง UUID ให้ครบทุกแถว',              'assignMissingUUIDs')
+      .addItem('🚑 ซ่อมแซม NameMapping',                   'repairNameMapping_UI')
+      .addSeparator()
+      .addItem('🔍 ค้นหาพิกัดซ้ำซ้อน',                    'findHiddenDuplicates')
+      .addItem('📊 ตรวจสอบคุณภาพข้อมูล',                   'showQualityReport_UI')
+      .addItem('🔄 คำนวณ Quality ใหม่ทั้งหมด',             'recalculateAllQuality')
+      .addItem('🎯 คำนวณ Confidence ใหม่ทั้งหมด',          'recalculateAllConfidence')
+      .addSeparator()
+      .addItem('🗂️ Initialize Record Status',              'initializeRecordStatus')
+      .addItem('🔀 Merge UUID ซ้ำซ้อน',                    'mergeDuplicates_UI')
+      .addItem('📋 ดูสถานะ Record ทั้งหมด',                'showRecordStatusReport')
+    )
+    .addToUi();
+
+  // เมนู 2: SCG
+  ui.createMenu('📦 2. เมนูพิเศษ SCG')
+    .addItem('📥 1. โหลดข้อมูล Shipment (+E-POD)',        'fetchDataFromSCGJWD')
+    .addItem('🟢 2. อัปเดตพิกัด + อีเมลพนักงาน',          'applyMasterCoordinatesToDailyJob')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('📍 GPS Queue Management')
+      .addItem('🔄 1. Sync GPS จากคนขับ → Queue',          'syncNewDataToMaster_UI')
+      .addItem('✅ 2. อนุมัติรายการที่ติ๊กแล้ว',            'applyApprovedFeedback')
+      .addItem('📊 3. ดูสถิติ Queue',                       'showGPSQueueStats')
+      .addSeparator()
+      .addItem('🛠️ สร้างชีต GPS_Queue ใหม่',               'createGPSQueueSheet')
+    )
+    .addSeparator()
+    .addSubMenu(ui.createMenu('🧹 เมนูล้างข้อมูล (Dangerous Zone)')
+      .addItem('⚠️ ล้างเฉพาะชีต Data',                     'clearDataSheet_UI')
+      .addItem('⚠️ ล้างเฉพาะชีต Input',                    'clearInputSheet_UI')
+      .addItem('⚠️ ล้างเฉพาะชีต สรุป_เจ้าของสินค้า',       'clearSummarySheet_UI')
+      .addItem('🔥 ล้างทั้งหมด',                            'clearAllSCGSheets_UI')
+    )
+    .addToUi();
+
+  // เมนู 3: ระบบอัตโนมัติ
   ui.createMenu('🤖 3. ระบบอัตโนมัติ')
-  .addItem('▶️ เปิดระบบช่วยเหลืองาน (Auto-Pilot)', 'START_AUTO_PILOT')
-  .addItem('⏹️ ปิดระบบช่วยเหลือ', 'STOP_AUTO_PILOT')
-  .addItem('👋 ปลุก AI Agent ทำงานทันที', 'WAKE_UP_AGENT')
-  .addSeparator()
-  .addSubMenu(ui.createMenu('🧪 Debug & Test Tools')
-    .addItem('🚀 รัน AI Indexing ทันที', 'forceRunAI_Now')
-    .addItem('🧠 ทดสอบ Tier 4 AI Resolution', 'debug_TestTier4SmartResolution')
-    .addItem('📡 ทดสอบ Gemini Connection', 'debugGeminiConnection')
-    .addItem('🔄 ล้าง AI Tags (แถวที่เลือก)', 'debug_ResetSelectedRowsAI')
+    .addItem('▶️ เปิดระบบ Auto-Pilot',                     'START_AUTO_PILOT')
+    .addItem('⏹️ ปิดระบบ Auto-Pilot',                      'STOP_AUTO_PILOT')
+    .addItem('👋 ปลุก AI Agent ทำงานทันที',                 'WAKE_UP_AGENT')
     .addSeparator()
-    .addItem('🔁 Reset SYNC_STATUS (ทดสอบ)', 'resetSyncStatus')
-  )
-  .addToUi();
-  // =================================================================
-  // ⚙️ เมนูชุดที่ 4: System Admin
-  // =================================================================
+    .addSubMenu(ui.createMenu('🧪 Debug & Test Tools')
+      .addItem('🚀 รัน AI Indexing ทันที',                  'forceRunAI_Now')
+      .addItem('🧠 ทดสอบ Tier 4 AI Resolution',             'debug_TestTier4SmartResolution')
+      .addItem('📡 ทดสอบ Gemini Connection',                'debugGeminiConnection')
+      .addItem('🔄 ล้าง AI Tags (แถวที่เลือก)',             'debug_ResetSelectedRowsAI')
+      .addSeparator()
+      // [Phase E] Phase D test helpers
+      .addItem('🔍 ทดสอบ Retrieval Candidates',             'testRetrieveCandidates')
+      .addItem('🧪 ทดสอบ AI Response Validation',           'testAIResponseValidation')
+      .addSeparator()
+      .addItem('🔁 Reset SYNC_STATUS (ทดสอบ)',              'resetSyncStatus')
+    )
+    .addToUi();
+
+  // เมนู 4: System Admin
   ui.createMenu('⚙️ System Admin')
-  .addItem('🏥 ตรวจสอบสถานะระบบ (Health Check)', 'runSystemHealthCheck')
-  .addItem('🧹 ล้าง Backup เก่า (>30 วัน)', 'cleanupOldBackups')
-  .addItem('📊 เช็คปริมาณข้อมูล (Cell Usage)', 'checkSpreadsheetHealth')
-  .addSeparator()
-  .addSubMenu(ui.createMenu('🔬 System Diagnostic')
-  .addItem('🛡️ ตรวจสอบ Schema ทุกชีต', 'runFullSchemaValidation') // ← เพิ่มบรรทัดนี้
-  .addItem('🔍 ตรวจสอบ Engine (Phase 1)', 'RUN_SYSTEM_DIAGNOSTIC')
-  .addItem('🕵️ ตรวจสอบชีต (Phase 2)', 'RUN_SHEET_DIAGNOSTIC')
-  .addItem('🧹 ล้าง Postal Cache', 'clearPostalCache_UI')
-  .addItem('🧹 ล้าง Search Cache', 'clearSearchCache_UI')
-  )
-  .addSeparator()
-  .addItem('🔔 ตั้งค่า LINE Notify', 'setupLineToken')
-  .addItem('✈️ ตั้งค่า Telegram Notify', 'setupTelegramConfig')
-  .addItem('🔐 ตั้งค่า API Key (Setup)', 'setupEnvironment')
-  .addToUi();
+    .addItem('🏥 ตรวจสอบสถานะระบบ (Health Check)',          'runSystemHealthCheck')
+    .addItem('🧹 ล้าง Backup เก่า (>30 วัน)',               'cleanupOldBackups')
+    .addItem('📊 เช็คปริมาณข้อมูล (Cell Usage)',            'checkSpreadsheetHealth')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('🔬 System Diagnostic')
+      .addItem('🛡️ ตรวจสอบ Schema ทุกชีต',                  'runFullSchemaValidation')
+      .addItem('🔍 ตรวจสอบ Engine (Phase 1)',               'RUN_SYSTEM_DIAGNOSTIC')
+      .addItem('🕵️ ตรวจสอบชีต (Phase 2)',                   'RUN_SHEET_DIAGNOSTIC')
+      .addSeparator()
+      // [Phase E NEW] Dry Run options
+      .addItem('🔵 Dry Run: ตรวจสอบ Mapping Conflicts',     'runDryRunMappingConflicts')
+      .addItem('🔵 Dry Run: ตรวจสอบ UUID Integrity',        'runDryRunUUIDIntegrity')
+      .addSeparator()
+      .addItem('🧹 ล้าง Postal Cache',                      'clearPostalCache_UI')
+      .addItem('🧹 ล้าง Search Cache',                      'clearSearchCache_UI')
+    )
+    .addSeparator()
+    .addItem('🔔 ตั้งค่า LINE Notify',                       'setupLineToken')
+    .addItem('✈️ ตั้งค่า Telegram Notify',                   'setupTelegramConfig')
+    .addItem('🔐 ตั้งค่า API Key (Setup)',                   'setupEnvironment')
+    .addToUi();
 }
 
 // =================================================================
