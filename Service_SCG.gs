@@ -170,36 +170,40 @@ function fetchDataFromSCGJWD() {
 // 2. COORDINATE MATCHING (V4.0)
 // ==========================================
 
+/**
+ * [Phase C FIXED] applyMasterCoordinatesToDailyJob()
+ * ใช้ resolveUUIDFromMap_() ก่อน lookup พิกัดจาก masterUUIDCoords
+ * ป้องกัน merged UUID ชี้ไปพิกัดเก่าที่ไม่ใช่ canonical
+ */
 function applyMasterCoordinatesToDailyJob() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss        = SpreadsheetApp.getActiveSpreadsheet();
   const dataSheet = ss.getSheetByName(SCG_CONFIG.SHEET_DATA);
-  const dbSheet = ss.getSheetByName(SCG_CONFIG.SHEET_MASTER_DB);
-  const mapSheet = ss.getSheetByName(SCG_CONFIG.SHEET_MAPPING);
-  const empSheet = ss.getSheetByName(SCG_CONFIG.SHEET_EMPLOYEE);
+  const dbSheet   = ss.getSheetByName(SCG_CONFIG.SHEET_MASTER_DB);
+  const mapSheet  = ss.getSheetByName(SCG_CONFIG.SHEET_MAPPING);
+  const empSheet  = ss.getSheetByName(SCG_CONFIG.SHEET_EMPLOYEE);
 
   if (!dataSheet || !dbSheet) return;
   const lastRow = dataSheet.getLastRow();
   if (lastRow < 2) return;
 
-  const masterCoords = {};
+  // โหลด master coords
+  const masterCoords     = {};
   const masterUUIDCoords = {};
 
   if (dbSheet.getLastRow() > 1) {
     const maxCol = Math.max(CONFIG.COL_NAME, CONFIG.COL_LAT, CONFIG.COL_LNG, CONFIG.COL_UUID);
     const dbData = dbSheet.getRange(2, 1, dbSheet.getLastRow() - 1, maxCol).getValues();
     dbData.forEach(r => {
-      const name = r[CONFIG.C_IDX.NAME];
-      const lat = r[CONFIG.C_IDX.LAT];
-      const lng = r[CONFIG.C_IDX.LNG];
-      const uuid = r[CONFIG.C_IDX.UUID];
-      if (name && lat && lng) {
-        const coords = lat + ", " + lng;
-        masterCoords[normalizeText(name)] = coords;
-        if (uuid) masterUUIDCoords[uuid] = coords;
+      const obj = dbRowToObject(r);
+      if (obj.name && obj.lat && obj.lng) {
+        const coords = obj.lat + ", " + obj.lng;
+        masterCoords[normalizeText(obj.name)] = coords;
+        if (obj.uuid) masterUUIDCoords[obj.uuid] = coords;
       }
     });
   }
 
+  // โหลด alias map
   const aliasMap = {};
   if (mapSheet && mapSheet.getLastRow() > 1) {
     mapSheet.getRange(2, 1, mapSheet.getLastRow() - 1, 2).getValues().forEach(r => {
@@ -207,36 +211,44 @@ function applyMasterCoordinatesToDailyJob() {
     });
   }
 
+  // [Phase C] โหลด UUID state map ครั้งเดียว
+  const uuidStateMap = buildUUIDStateMap_();
+
+  // โหลด employee map
   const empMap = {};
-if (empSheet) {
-  // [FIXED v4.1] เก็บค่า getLastRow() ไว้ก่อน
-  // ป้องกัน -1 กรณีชีตว่างเปล่าหรือมีแค่ header
-  var empLastRow = empSheet.getLastRow();
-  if (empLastRow >= 2) {
-    empSheet.getRange(2, 1, empLastRow - 1, 8).getValues().forEach(r => {
-      if (r[1] && r[6]) empMap[normalizeText(r[1])] = r[6];
-    });
+  if (empSheet) {
+    var empLastRow = empSheet.getLastRow();
+    if (empLastRow >= 2) {
+      empSheet.getRange(2, 1, empLastRow - 1, 8).getValues().forEach(r => {
+        if (r[1] && r[6]) empMap[normalizeText(r[1])] = r[6];
+      });
+    }
   }
-}
-  const values = dataSheet.getRange(2, 1, lastRow - 1, 29).getValues();
+
+  const values         = dataSheet.getRange(2, 1, lastRow - 1, CONFIG.DATA_TOTAL_COLS).getValues();
   const latLongUpdates = [];
-  const bgUpdates = [];
-  const emailUpdates = [];
+  const bgUpdates      = [];
+  const emailUpdates   = [];
 
   values.forEach(r => {
+    const job  = dailyJobRowToObject(r);
     let newGeo = "";
-    let bg = null;
-    let email = r[22];
+    let bg     = null;
+    let email  = job.email;
 
-    if (r[10]) {
-      let rawName = normalizeText(r[10]);
+    if (job.shipToName) {
+      let rawName   = normalizeText(job.shipToName);
       let targetUID = aliasMap[rawName];
+
+      // [Phase C] resolve เป็น canonical UUID ก่อน lookup พิกัด
+      if (targetUID) {
+        targetUID = resolveUUIDFromMap_(targetUID, uuidStateMap);
+      }
+
       if (targetUID && masterUUIDCoords[targetUID]) {
-        newGeo = masterUUIDCoords[targetUID];
-        bg = "#b6d7a8";
+        newGeo = masterUUIDCoords[targetUID]; bg = "#b6d7a8";
       } else if (masterCoords[rawName]) {
-        newGeo = masterCoords[rawName];
-        bg = "#b6d7a8";
+        newGeo = masterCoords[rawName]; bg = "#b6d7a8";
       } else {
         let branchMatch = tryMatchBranch_(rawName, masterCoords);
         if (branchMatch) { newGeo = branchMatch; bg = "#ffe599"; }
@@ -246,16 +258,16 @@ if (empSheet) {
     latLongUpdates.push([newGeo]);
     bgUpdates.push([bg]);
 
-    if (r[4]) {
-      const cleanDriver = normalizeText(r[4]);
+    if (job.driverName) {
+      const cleanDriver = normalizeText(job.driverName);
       if (empMap[cleanDriver]) email = empMap[cleanDriver];
     }
     emailUpdates.push([email]);
   });
 
-  dataSheet.getRange(2, 27, latLongUpdates.length, 1).setValues(latLongUpdates);
-  dataSheet.getRange(2, 27, bgUpdates.length, 1).setBackgrounds(bgUpdates);
-  dataSheet.getRange(2, 23, emailUpdates.length, 1).setValues(emailUpdates);
+  dataSheet.getRange(2, DATA_IDX.LATLNG_ACTUAL + 1, latLongUpdates.length, 1).setValues(latLongUpdates);
+  dataSheet.getRange(2, DATA_IDX.LATLNG_ACTUAL + 1, bgUpdates.length,      1).setBackgrounds(bgUpdates);
+  dataSheet.getRange(2, DATA_IDX.EMAIL + 1,          emailUpdates.length,   1).setValues(emailUpdates);
 
   ss.toast("✅ อัปเดตพิกัดและข้อมูลพนักงานเรียบร้อย", "System");
 }
@@ -318,57 +330,42 @@ function checkIsEPOD(ownerName, invoiceNo) {
 // 4. BUILD SUMMARY: เจ้าของสินค้า [UPDATED v5.0]
 // ==========================================
 
+/**
+ * [Phase B FIXED] buildOwnerSummary()
+ * ใช้ DATA_IDX แทน r[9], r[2]
+ */
 function buildOwnerSummary() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss        = SpreadsheetApp.getActiveSpreadsheet();
   const dataSheet = ss.getSheetByName(SCG_CONFIG.SHEET_DATA);
   if (!dataSheet || dataSheet.getLastRow() < 2) return;
 
-  const data = dataSheet.getRange(2, 1, dataSheet.getLastRow() - 1, 29).getValues();
-
-  const COL_INVOICE = 2;
-  const COL_SOLDTO  = 9;
-
+  // [Phase B] ใช้ DATA_TOTAL_COLS
+  const data     = dataSheet.getRange(2, 1, dataSheet.getLastRow() - 1, CONFIG.DATA_TOTAL_COLS).getValues();
   const ownerMap = {};
 
   data.forEach(r => {
-    const owner   = r[COL_SOLDTO];
-    const invoice = String(r[COL_INVOICE]);
-
-    if (!owner) return;
-    if (!ownerMap[owner]) {
-      ownerMap[owner] = { all: new Set(), epod: new Set() };
+    // [Phase B] ใช้ DATA_IDX
+    const job = dailyJobRowToObject(r);
+    if (!job.soldToName) return;
+    if (!ownerMap[job.soldToName]) ownerMap[job.soldToName] = { all: new Set(), epod: new Set() };
+    if (!job.invoiceNo) return;
+    if (checkIsEPOD(job.soldToName, job.invoiceNo)) {
+      ownerMap[job.soldToName].epod.add(job.invoiceNo);
+    } else {
+      ownerMap[job.soldToName].all.add(job.invoiceNo);
     }
-    if (!invoice) return;
-
-    if (checkIsEPOD(owner, invoice)) {
-      ownerMap[owner].epod.add(invoice);
-      return;
-    }
-    ownerMap[owner].all.add(invoice);
   });
 
   const summarySheet = ss.getSheetByName("สรุป_เจ้าของสินค้า");
-  if (!summarySheet) {
-    SpreadsheetApp.getUi().alert("❌ ไม่พบชีต สรุป_เจ้าของสินค้า กรุณาสร้างชีตก่อน");
-    return;
-  }
+  if (!summarySheet) { SpreadsheetApp.getUi().alert("❌ ไม่พบชีต สรุป_เจ้าของสินค้า"); return; }
 
   const summaryLastRow = summarySheet.getLastRow();
-  if (summaryLastRow > 1) {
-    summarySheet.getRange(2, 1, summaryLastRow - 1, 6).clearContent().setBackground(null);
-  }
+  if (summaryLastRow > 1) summarySheet.getRange(2, 1, summaryLastRow - 1, 6).clearContent().setBackground(null);
 
   const rows = [];
   Object.keys(ownerMap).sort().forEach(owner => {
     const o = ownerMap[owner];
-    rows.push([
-      "",           // Col A: SummaryKey ← ว่าง ใส่เองได้
-      owner,        // Col B: SoldToName
-      "",           // Col C: PlanDelivery ← ว่าง ใส่เองได้
-      o.all.size,   // Col D: จำนวน_ทั้งหมด (ต้องสแกน)
-      o.epod.size,  // Col E: จำนวน_E-POD_ทั้งหมด
-      new Date()    // Col F: LastUpdated
-    ]);
+    rows.push(["", owner, "", o.all.size, o.epod.size, new Date()]);
   });
 
   if (rows.length > 0) {
@@ -376,84 +373,55 @@ function buildOwnerSummary() {
     summarySheet.getRange(2, 4, rows.length, 2).setNumberFormat("#,##0");
     summarySheet.getRange(2, 6, rows.length, 1).setNumberFormat("dd/mm/yyyy HH:mm");
   }
-
-  console.log(`[Owner Summary v5.0] Built ${rows.length} owner rows.`);
 }
 
-// ==========================================
-// 5. BUILD SUMMARY: Shipment [ADDED v5.0]
-// ==========================================
-
+/**
+ * [Phase B FIXED] buildShipmentSummary()
+ * ใช้ DATA_IDX แทน r[3], r[5], r[9], r[2]
+ */
 function buildShipmentSummary() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss        = SpreadsheetApp.getActiveSpreadsheet();
   const dataSheet = ss.getSheetByName(SCG_CONFIG.SHEET_DATA);
   if (!dataSheet || dataSheet.getLastRow() < 2) return;
 
-  const data = dataSheet.getRange(2, 1, dataSheet.getLastRow() - 1, 29).getValues();
-
-  const COL_INVOICE  = 2;
-  const COL_SOLDTO   = 9;
-  const COL_SHIPMENT = 3;
-  const COL_TRUCK    = 5;
-
+  // [Phase B] ใช้ DATA_TOTAL_COLS
+  const data        = dataSheet.getRange(2, 1, dataSheet.getLastRow() - 1, CONFIG.DATA_TOTAL_COLS).getValues();
   const shipmentMap = {};
 
   data.forEach(r => {
-    const shipmentNo = String(r[COL_SHIPMENT]);
-    const truck      = String(r[COL_TRUCK]);
-    const owner      = r[COL_SOLDTO];
-    const invoice    = String(r[COL_INVOICE]);
-
-    if (!shipmentNo || !truck) return;
-
-    const key = shipmentNo + "_" + truck;
+    // [Phase B] ใช้ DATA_IDX
+    const job = dailyJobRowToObject(r);
+    if (!job.shipmentNo || !job.truckLicense) return;
+    const key = job.shipmentNo + "_" + job.truckLicense;
     if (!shipmentMap[key]) {
-      shipmentMap[key] = { shipmentNo: shipmentNo, truck: truck, all: new Set(), epod: new Set() };
+      shipmentMap[key] = { shipmentNo: job.shipmentNo, truck: job.truckLicense, all: new Set(), epod: new Set() };
     }
-
-    if (!invoice) return;
-
-    if (checkIsEPOD(owner, invoice)) {
-      shipmentMap[key].epod.add(invoice);
-      return;
+    if (!job.invoiceNo) return;
+    if (checkIsEPOD(job.soldToName, job.invoiceNo)) {
+      shipmentMap[key].epod.add(job.invoiceNo);
+    } else {
+      shipmentMap[key].all.add(job.invoiceNo);
     }
-    shipmentMap[key].all.add(invoice);
   });
 
   const summarySheet = ss.getSheetByName("สรุป_Shipment");
-  if (!summarySheet) {
-    SpreadsheetApp.getUi().alert("❌ ไม่พบชีต สรุป_Shipment กรุณาสร้างชีตก่อน");
-    return;
-  }
+  if (!summarySheet) { SpreadsheetApp.getUi().alert("❌ ไม่พบชีต สรุป_Shipment"); return; }
 
   const summaryLastRow = summarySheet.getLastRow();
-  if (summaryLastRow > 1) {
-    summarySheet.getRange(2, 1, summaryLastRow - 1, 7).clearContent().setBackground(null);
-  }
+  if (summaryLastRow > 1) summarySheet.getRange(2, 1, summaryLastRow - 1, 7).clearContent().setBackground(null);
 
   const rows = [];
   Object.keys(shipmentMap).sort().forEach(key => {
     const s = shipmentMap[key];
-    rows.push([
-      key,          // Col A: ShipmentKey ← Key ใน AppSheet
-      s.shipmentNo, // Col B: ShipmentNo
-      s.truck,      // Col C: TruckLicense
-      "",           // Col D: PlanDelivery ← ว่าง ใส่เองได้
-      s.all.size,   // Col E: จำนวน_ทั้งหมด (ต้องสแกน)
-      s.epod.size,  // Col F: จำนวน_E-POD_ทั้งหมด
-      new Date()    // Col G: LastUpdated
-    ]);
+    rows.push([key, s.shipmentNo, s.truck, "", s.all.size, s.epod.size, new Date()]);
   });
 
   if (rows.length > 0) {
     summarySheet.getRange(2, 1, rows.length, 7).setValues(rows);
-    summarySheet.getRange(2, 5, rows.length, 2).setNumberFormat("#,##0"); // Col E, F
-    summarySheet.getRange(2, 7, rows.length, 1).setNumberFormat("dd/mm/yyyy HH:mm"); // Col G
+    summarySheet.getRange(2, 5, rows.length, 2).setNumberFormat("#,##0");
+    summarySheet.getRange(2, 7, rows.length, 1).setNumberFormat("dd/mm/yyyy HH:mm");
   }
-
-  console.log(`[Shipment Summary v5.0] Built ${rows.length} shipment rows.`);
 }
-
 // ==========================================
 // 6. CLEAR FUNCTIONS
 // ==========================================
