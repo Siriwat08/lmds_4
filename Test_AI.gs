@@ -1,183 +1,180 @@
 /**
- * VERSION: 000
- * 🧪 Test & Debug: AI Capabilities (Enterprise Debugging Suite)
- * Version: 4.0 Compatible with System V4.0
- * ---------------------------------------------
- * [PRESERVED]: Manual triggers, Connection test, and Row Reset logic.
- * [MODIFIED v4.0]: Upgraded debug_ResetSelectedRowsAI to clear both [AI] and [Agent_V4] tags.
- * [MODIFIED v4.0]: Replaced legacy Browser.msgBox with SpreadsheetApp.getUi() for stability.
- * [ADDED v4.0]: debug_TestTier4SmartResolution() to manually trigger the new Tier 4 AI.
- * Author: Elite Logistics Architect
+ * VERSION: 4.2 — Phase D
+ * [Phase D] เพิ่ม testRetrieveCandidates_(), testAIResponseValidation_()
  */
 
-// ==========================================
-// 1. MANUAL TRIGGERS (AI BATCH RUNNERS)
-// ==========================================
-
-/**
- * 🚀 Manual Trigger: สั่งรัน AI ทันที (AutoPilot Batch - 20 แถว)
- * ใช้สำหรับทดสอบการทำงาน หรือเร่งด่วนเก็บตกข้อมูล (สร้าง Index)
- */
 function forceRunAI_Now() {
   var ui = SpreadsheetApp.getUi();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-
   try {
-    // 1. Dependency Check
     if (typeof processAIIndexing_Batch !== 'function') {
-      throw new Error("Critical: ไม่พบฟังก์ชัน 'processAIIndexing_Batch' ใน Service_AutoPilot.gs");
+      throw new Error("ไม่พบฟังก์ชัน 'processAIIndexing_Batch'");
     }
-
-    // 2. Execution
-    ss.toast("🚀 กำลังเริ่มระบบ AI Indexing (Batch Mode)...", "Debug System", 10);
-    console.info("[Debug] Manual Trigger: processAIIndexing_Batch");
-
-    // เรียกฟังก์ชันจาก Service_AutoPilot
+    ss.toast("🚀 กำลังเริ่ม AI Indexing...", "Debug", 10);
     processAIIndexing_Batch();
-
-    ui.alert(
-      "✅ สั่งงานเรียบร้อย!\n" +
-      "ระบบได้ประมวลผลข้อมูลชุดล่าสุดเสร็จสิ้น\n" +
-      "กรุณาตรวจสอบคอลัมน์ Normalized ใน Database ว่ามี Tag '[AI]' หรือไม่"
-    );
-
-  } catch (e) {
-    console.error("[Debug Error] forceRunAI_Now: " + e.message);
+    ui.alert("✅ สั่งงานเรียบร้อย!\nตรวจ Column Normalized ว่ามี Tag '[AI]' หรือไม่");
+  } catch(e) {
     ui.alert("❌ Error: " + e.message);
   }
 }
 
-/**
- * 🧠 [NEW v4.0] Manual Trigger: ทดสอบ Tier 4 Smart Resolution ทันที
- */
 function debug_TestTier4SmartResolution() {
   var ui = SpreadsheetApp.getUi();
   try {
     if (typeof resolveUnknownNamesWithAI !== 'function') {
-      throw new Error("Critical: ไม่พบฟังก์ชัน 'resolveUnknownNamesWithAI' ใน Service_Agent.gs");
+      throw new Error("ไม่พบฟังก์ชัน 'resolveUnknownNamesWithAI'");
     }
-
-    var response = ui.alert("🧠 ยืนยันรันทดสอบ Tier 4", "ต้องการดึงรายชื่อที่ไม่มีพิกัดจากหน้า SCG Data\nไปให้ Gemini วิเคราะห์จับคู่กับ Master Database เลยหรือไม่?", ui.ButtonSet.YES_NO);
-
-    if (response == ui.Button.YES) {
-      console.info("[Debug] Manual Trigger: resolveUnknownNamesWithAI");
-      resolveUnknownNamesWithAI();
-    }
-  } catch (e) {
-    console.error("[Debug Error] Tier 4 Test: " + e.message);
+    var response = ui.alert("🧠 ยืนยันรัน Tier 4?",
+      "ดึงรายชื่อที่ไม่มีพิกัดจาก SCG Data ส่งให้ AI วิเคราะห์",
+      ui.ButtonSet.YES_NO);
+    if (response === ui.Button.YES) resolveUnknownNamesWithAI();
+  } catch(e) {
     ui.alert("❌ Error: " + e.message);
   }
 }
 
-// ==========================================
-// 2. API CONNECTION TESTING
-// ==========================================
-
-/**
- * 📡 Connection Test: ทดสอบคุยกับ Gemini (ไม่ยุ่งกับ Database)
- * ใช้เช็คว่า API Key ใช้งานได้จริงหรือไม่
- */
 function debugGeminiConnection() {
   var ui = SpreadsheetApp.getUi();
   var apiKey;
+  try { apiKey = CONFIG.GEMINI_API_KEY; }
+  catch(e) { ui.alert("❌ API Key Error", e.message, ui.ButtonSet.OK); return; }
 
   try {
-    // [MODIFIED v4.0] Safe Getter Extraction
-    apiKey = CONFIG.GEMINI_API_KEY;
-  } catch (e) {
-    ui.alert("❌ API Key Error", "กรุณาตั้งค่า API Key ผ่าน Setup_Security.gs ก่อนครับ\n(" + e.message + ")", ui.ButtonSet.OK);
-    return;
-  }
-
-  var testWord = "SCG (Bang Sue Branch)";
-  ui.alert("📡 กำลังทดสอบส่งข้อความหา Gemini...\nInput: " + testWord);
-
-  try {
-    console.info("[Debug] Pinging Gemini API...");
-
-    // Fallback: ยิง API เองเพื่อ Isolate ปัญหา (จะได้รู้ว่าผิดที่ฟังก์ชันหรือ API)
-    var model = (typeof CONFIG !== 'undefined' && CONFIG.AI_MODEL) ? CONFIG.AI_MODEL : "gemini-1.5-flash";
-    var url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    var payload = {
-      "contents": [{ "parts": [{ "text": `Hello Gemini, test connection. Say "Connection Success" and reply with Thai translation of ${testWord}` }] }]
-    };
-    var options = {
-      "method": "post", "contentType": "application/json",
-      "payload": JSON.stringify(payload), "muteHttpExceptions": true
-    };
-
-    var res = UrlFetchApp.fetch(url, options);
+    var model    = CONFIG.AI_MODEL || "gemini-1.5-flash";
+    var url      = "https://generativelanguage.googleapis.com/v1beta/models/" +
+                   model + ":generateContent?key=" + apiKey;
+    var payload  = { "contents": [{ "parts": [{ "text": "Say: Connection OK. Prompt-Version: " + AI_CONFIG.PROMPT_VERSION }] }] };
+    var options  = { "method": "post", "contentType": "application/json",
+                     "payload": JSON.stringify(payload), "muteHttpExceptions": true };
+    var res      = UrlFetchApp.fetch(url, options);
 
     if (res.getResponseCode() === 200) {
       var json = JSON.parse(res.getContentText());
-      var text = (json.candidates && json.candidates[0].content) ? json.candidates[0].content.parts[0].text : "No Text Data";
-      ui.alert("✅ API Ping Success!\n\nResponse:\n" + text);
-      console.log("[Debug] Gemini API Connection: OK");
+      var text = (json.candidates && json.candidates[0].content)
+        ? json.candidates[0].content.parts[0].text
+        : "No Text";
+      ui.alert("✅ API Connection OK!\n\nResponse:\n" + text);
     } else {
       ui.alert("❌ API Error: " + res.getContentText());
-      console.error("[Debug] Gemini API Error: " + res.getContentText());
     }
-
-  } catch (e) {
+  } catch(e) {
     ui.alert("❌ Connection Failed: " + e.message);
-    console.error("[Debug] Connection Failed: " + e.message);
   }
 }
 
-// ==========================================
-// 3. ROW MANIPULATION (FOR RE-RUNNING AI)
-// ==========================================
-
-/**
- * 🔄 Reset AI Tags: ล้าง Tag ระบบ AI เพื่อให้รันใหม่ (เฉพาะแถวที่เลือก)
- * [MODIFIED v4.0]: ล้างทั้ง [AI] และ [Agent_V4]
- */
 function debug_ResetSelectedRowsAI() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var ui = SpreadsheetApp.getUi();
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var ui    = SpreadsheetApp.getUi();
   var sheet = ss.getActiveSheet();
 
   if (sheet.getName() !== CONFIG.SHEET_NAME) {
-    ui.alert("⚠️ System Note", "กรุณาไฮไลต์เลือก Cell ในชีต Database เท่านั้นครับ", ui.ButtonSet.OK);
+    ui.alert("⚠️ กรุณาไฮไลต์ Cell ในชีต Database เท่านั้นครับ");
     return;
   }
 
-  var range = sheet.getActiveRange();
-  var startRow = range.getRow();
-  var numRows = range.getNumRows();
-
-  // ใช้ C_IDX ถ้ามี หรือ Fallback
-  var colIndex = (typeof CONFIG !== 'undefined' && CONFIG.COL_NORMALIZED) ? CONFIG.COL_NORMALIZED : 6;
-
+  var range      = sheet.getActiveRange();
+  var startRow   = range.getRow();
+  var numRows    = range.getNumRows();
+  var colIndex   = CONFIG.COL_NORMALIZED;
   var targetRange = sheet.getRange(startRow, colIndex, numRows, 1);
-  var values = targetRange.getValues();
-
+  var values     = targetRange.getValues();
   var resetCount = 0;
+
   for (var i = 0; i < values.length; i++) {
     var val = values[i][0] ? values[i][0].toString() : "";
-
-    // ตรวจหา Tag ของ AI (ทั้งระบบเก่าและใหม่)
-    if (val.indexOf("[AI]") !== -1 || val.indexOf("[Agent_") !== -1) {
-
-      // ลบ Tags ออก (ทิ้งคำที่ AI เติมไว้ได้ หรือจะลบให้ว่างเลยก็ได้)
-      // V4.0 เราเลือกลบแค่ตัว Tag ออกเพื่อให้ AI เข้ามาประมวลผลซ้ำ
-      var cleanedVal = val
-        .replace(" [AI]", "").replace("[AI]", "")
-        .replace(/\[Agent_.*?\]/g, "") // ลบ Tag รูปแบบ [Agent_xxx] ทั้งหมด
+    // [Phase D] ลบทั้ง [AI] และ prompt version tag
+    if (val.indexOf(AI_CONFIG.TAG_AI) !== -1 || val.indexOf("[Agent_") !== -1) {
+      val = val
+        .replace(/\s*\[AI\]/g, "")
+        .replace(/\s*\[Agent_.*?\]/g, "")
+        .replace(/\s*\[v\d+\.\d+\]/g, "")
         .trim();
-
-      values[i][0] = cleanedVal;
+      values[i][0] = val;
       resetCount++;
     }
   }
 
   if (resetCount > 0) {
     targetRange.setValues(values);
-    ss.toast("🔄 Reset AI Status เรียบร้อย " + resetCount + " แถว", "Debug", 5);
-    console.log(`[Debug] Reset AI tags for ${resetCount} rows.`);
+    ss.toast("🔄 Reset AI tags: " + resetCount + " แถว", "Debug", 5);
   } else {
-    ss.toast("ℹ️ ไม่พบรายการที่มี Tag AI ในส่วนที่คุณไฮไลต์เลือกไว้", "Debug", 5);
+    ss.toast("ℹ️ ไม่พบ AI tags ในส่วนที่เลือก", "Debug", 5);
   }
 }
 
+// ==========================================
+// [Phase D NEW] TEST HELPERS
+// ==========================================
 
+/**
+ * testRetrieveCandidates_()
+ * ทดสอบว่า retrieval คัด candidates ได้ถูกต้องก่อนส่ง AI
+ */
+function testRetrieveCandidates() {
+  var ui = SpreadsheetApp.getUi();
+
+  var response = ui.prompt(
+    "🔍 Test Retrieval",
+    "ใส่ชื่อที่ต้องการทดสอบ:",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+
+  var testName = response.getResponseText().trim();
+  if (!testName) return;
+
+  var ss      = SpreadsheetApp.getActiveSpreadsheet();
+  var dbSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  var lastRow = dbSheet.getLastRow();
+  if (lastRow < 2) { ui.alert("ℹ️ Database ว่างเปล่า"); return; }
+
+  var dbRows   = dbSheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).getValues();
+  var mapRows  = loadNameMappingRows_();
+  var results  = retrieveCandidateMasters_(testName, dbRows, mapRows, 10);
+
+  if (results.length === 0) {
+    ui.alert("ℹ️ ไม่พบ candidates สำหรับ: '" + testName + "'");
+    return;
+  }
+
+  var msg = "🔍 Retrieval Results สำหรับ: '" + testName + "'\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━\n";
+  results.forEach(function(r, i) {
+    msg += (i + 1) + ". " + r.name + "\n   UUID: " + r.uid.substring(0, 12) + "...\n";
+  });
+  msg += "━━━━━━━━━━━━━━━━━━━━━━━\n";
+  msg += "พบ " + results.length + " candidates\n";
+  msg += "💡 นี่คือสิ่งที่จะส่งให้ AI วิเคราะห์แทน slice(0,500)";
+
+  ui.alert(msg);
+}
+
+/**
+ * testAIResponseValidation_()
+ * ทดสอบ parse guard กับ response จริงจาก Gemini
+ */
+function testAIResponseValidation() {
+  var ui = SpreadsheetApp.getUi();
+  var apiKey;
+  try { apiKey = CONFIG.GEMINI_API_KEY; }
+  catch(e) { ui.alert("❌ API Key Error: " + e.message); return; }
+
+  var testName = "โลตัส สาขาบางนา";
+  var result   = callGeminiThinking_JSON(testName, apiKey);
+
+  if (result) {
+    ui.alert(
+      "✅ Parse Guard: ผ่าน!\n\n" +
+      "Input: " + testName + "\n" +
+      "Output: " + result + "\n" +
+      "Prompt Version: " + AI_CONFIG.PROMPT_VERSION
+    );
+  } else {
+    ui.alert(
+      "⚠️ Parse Guard: ไม่ได้ keywords\n\n" +
+      "Input: " + testName + "\n" +
+      "อาจเป็นเพราะ API key ปัญหา หรือ rate limit\n" +
+      "ตรวจสอบ Execution Log ครับ"
+    );
+  }
+}
