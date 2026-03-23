@@ -79,11 +79,15 @@ function resetSyncStatus() {
   ui.alert("✅ Reset เรียบร้อยแล้วครับ");
 }
 
+/**
+ * [Phase A FIXED] applyApprovedFeedback()
+ * เพิ่ม REJECTED path, CONFLICT detection, batch write DB
+ */
 function applyApprovedFeedback() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var ui = SpreadsheetApp.getUi();
+  var ss  = SpreadsheetApp.getActiveSpreadsheet();
+  var ui  = SpreadsheetApp.getUi();
 
-  var queueSheet = ss.getSheetByName(SCG_CONFIG.SHEET_GPS_QUEUE);
+  var queueSheet  = ss.getSheetByName(SCG_CONFIG.SHEET_GPS_QUEUE);
   var masterSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
 
   if (!queueSheet || !masterSheet) {
@@ -97,136 +101,135 @@ function applyApprovedFeedback() {
     return;
   }
 
-  // [NEW v4.1] ตรวจสอบ Schema ก่อนทำงาน
-  try { preCheck_Approve(); } catch (e) {
+  try { preCheck_Approve(); } catch(e) {
+    lock.releaseLock();
     ui.alert("❌ Schema Error", e.message, ui.ButtonSet.OK);
     return;
   }
 
   try {
-    // --- อ่าน GPS_Queue ---
+    console.log("[applyApprovedFeedback] START — Phase A Fixed");
+
     var lastQueueRow = getRealLastRow_(queueSheet, 1);
-    if (lastQueueRow < 2) {
-      ui.alert("ℹ️ ไม่มีรายการใน GPS_Queue");
-      return;
-    }
+    if (lastQueueRow < 2) { ui.alert("ℹ️ ไม่มีรายการใน GPS_Queue"); return; }
 
-    var queueData = queueSheet.getRange(2, 1, lastQueueRow - 1, 9).getValues();
+    var queueData = queueSheet.getRange(2, 1, lastQueueRow - 1, CONFIG.GPS_QUEUE_TOTAL_COLS).getValues();
 
-    // --- โหลด Database เข้า Memory ---
+    // โหลด DB UUID map
     var lastRowM = getRealLastRow_(masterSheet, CONFIG.COL_NAME);
-    var dbData = masterSheet.getRange(2, 1, lastRowM - 1, 20).getValues();
-
-    // สร้าง UUID → rowIndex map
-    var uuidMap = {};
-    dbData.forEach(function (r, i) {
-      if (r[CONFIG.C_IDX.UUID]) {
-        uuidMap[r[CONFIG.C_IDX.UUID]] = i;
-      }
+    var dbData   = masterSheet.getRange(2, 1, lastRowM - 1, CONFIG.DB_TOTAL_COLS).getValues();
+    var uuidMap  = {};
+    dbData.forEach(function(r, i) {
+      if (r[CONFIG.C_IDX.UUID]) uuidMap[r[CONFIG.C_IDX.UUID]] = i;
     });
 
-    // --- ประมวลผลแถวที่ Approve = true ---
-    var approvedCount = 0;
-    var skippedCount = 0;
-    var ts = new Date();
+    // Counters
+    var counts = { approved: 0, rejected: 0, conflict: 0, skipped: 0, alreadyDone: 0 };
+    var ts     = new Date();
 
-    queueData.forEach(function (row, i) {
-      var isApproved = row[7]; // Col H: Approve
-      var isRejected = row[8]; // Col I: Reject
-      var reason = row[6]; // Col G: Reason
+    // รวม updates ไว้เขียน batch
+    var dbRowUpdates       = {};
+    var queueReasonUpdates = [];
 
-      // ข้ามแถวที่ไม่ได้ติ๊ก หรือ Reject แล้ว
-      if (!isApproved || isRejected) {
-        skippedCount++;
+    queueData.forEach(function(row, i) {
+      var isApproved = row[7];
+      var isRejected = row[8];
+      var reason     = (row[6] || "").toString();
+
+      // ข้ามที่ดำเนินการแล้ว
+      if (reason === "APPROVED" || reason === "REJECTED" || reason === "CONFLICT") {
+        counts.alreadyDone++;
         return;
       }
 
-      // ข้ามแถวที่ดำเนินการแล้ว
-      if (reason === "APPROVED" || reason === "REJECTED") {
+      // [Phase A NEW] Conflict Detection
+      if (isApproved === true && isRejected === true) {
+        counts.conflict++;
+        queueReasonUpdates.push({ rowNum: i + 2, reason: "CONFLICT" });
+        console.warn("[applyApprovedFeedback] CONFLICT แถว " + (i + 2));
         return;
       }
 
-      var uuid = row[2]; // Col C: UUID_DB
-      var latLngDriver = row[3]; // Col D: LatLng_Driver
-
-      if (!uuid || !latLngDriver) {
-        skippedCount++;
+      // [Phase A NEW] Reject Path
+      if (isRejected === true && isApproved !== true) {
+        counts.rejected++;
+        queueReasonUpdates.push({ rowNum: i + 2, reason: "REJECTED" });
+        console.log("[applyApprovedFeedback] REJECTED แถว " + (i + 2) + ": " + row[1]);
         return;
       }
 
-      // แปลง "lat, lng" → ตัวเลข
-      var parts = latLngDriver.toString().split(",");
-      if (parts.length !== 2) {
-        skippedCount++;
-        return;
-      }
+      // Approve Path
+      if (isApproved !== true) { counts.skipped++; return; }
+
+      var uuid         = (row[2] || "").toString();
+      var latLngDriver = (row[3] || "").toString();
+      if (!uuid || !latLngDriver) { counts.skipped++; return; }
+
+      var parts  = latLngDriver.split(",");
+      if (parts.length !== 2) { counts.skipped++; return; }
 
       var newLat = parseFloat(parts[0].trim());
       var newLng = parseFloat(parts[1].trim());
+      if (isNaN(newLat) || isNaN(newLng)) { counts.skipped++; return; }
 
-      if (isNaN(newLat) || isNaN(newLng)) {
-        skippedCount++;
-        return;
-      }
-
-      // หาแถวใน Database
       if (!uuidMap.hasOwnProperty(uuid)) {
-        skippedCount++;
-        console.warn("UUID ไม่พบใน Database: " + uuid);
+        console.warn("[applyApprovedFeedback] UUID ไม่พบ: " + uuid);
+        counts.skipped++;
         return;
       }
 
-      var dbRowIndex = uuidMap[uuid];
-      var dbRowNum = dbRowIndex + 2; // +1 header +1 เพราะ 0-based
-
-      // อัปเดต Database
-      masterSheet.getRange(dbRowNum, CONFIG.COL_LAT)
-        .setValue(newLat);
-      masterSheet.getRange(dbRowNum, CONFIG.COL_LNG)
-        .setValue(newLng);
-      masterSheet.getRange(dbRowNum, CONFIG.COL_COORD_SOURCE)
-        .setValue("Driver_GPS");
-      masterSheet.getRange(dbRowNum, CONFIG.COL_COORD_CONFIDENCE)
-        .setValue(95);
-      masterSheet.getRange(dbRowNum, CONFIG.COL_COORD_LAST_UPDATED)
-        .setValue(ts);
-      masterSheet.getRange(dbRowNum, CONFIG.COL_UPDATED)
-        .setValue(ts);
-
-      // Mark Queue ว่า APPROVED
-      queueSheet.getRange(i + 2, 7).setValue("APPROVED");
-
-      approvedCount++;
-      console.log("✅ Approved: " + row[1] + " | UUID: " + uuid);
+      dbRowUpdates[uuidMap[uuid]] = { lat: newLat, lng: newLng, ts: ts };
+      queueReasonUpdates.push({ rowNum: i + 2, reason: "APPROVED" });
+      counts.approved++;
     });
 
-    // ล้าง Search Cache เพราะพิกัดเปลี่ยน
-    if (typeof clearSearchCache === 'function') {
-      clearSearchCache();
+    // [Phase A NEW] Batch write DB
+    if (Object.keys(dbRowUpdates).length > 0) {
+      var fullDb = masterSheet.getRange(2, 1, lastRowM - 1, CONFIG.DB_TOTAL_COLS).getValues();
+      Object.keys(dbRowUpdates).forEach(function(idx) {
+        var upd = dbRowUpdates[idx];
+        var i   = parseInt(idx);
+        fullDb[i][CONFIG.C_IDX.LAT]                = upd.lat;
+        fullDb[i][CONFIG.C_IDX.LNG]                = upd.lng;
+        fullDb[i][CONFIG.C_IDX.COORD_SOURCE]       = "Driver_GPS";
+        fullDb[i][CONFIG.C_IDX.COORD_CONFIDENCE]   = 95;
+        fullDb[i][CONFIG.C_IDX.COORD_LAST_UPDATED] = upd.ts;
+        fullDb[i][CONFIG.C_IDX.UPDATED]            = upd.ts;
+      });
+      masterSheet.getRange(2, 1, lastRowM - 1, CONFIG.DB_TOTAL_COLS).setValues(fullDb);
+      console.log("[applyApprovedFeedback] Batch write: " + Object.keys(dbRowUpdates).length + " rows");
     }
 
+    // Write queue reasons
+    queueReasonUpdates.forEach(function(upd) {
+      queueSheet.getRange(upd.rowNum, 7).setValue(upd.reason);
+    });
+
+    if (typeof clearSearchCache === 'function') clearSearchCache();
     SpreadsheetApp.flush();
 
-    var msg = "✅ อนุมัติเรียบร้อย!\n\n" +
-      "📍 อัปเดตพิกัดใน Database: " + approvedCount + " ราย\n" +
-      "⏭️ ข้ามไป: " + skippedCount + " ราย\n\n";
+    var msg = "✅ ดำเนินการเรียบร้อย!\n\n" +
+              "📍 APPROVED: "  + counts.approved   + " ราย\n" +
+              "❌ REJECTED: "  + counts.rejected   + " ราย\n" +
+              "⚠️ CONFLICT: "  + counts.conflict   + " ราย\n" +
+              "⏭️ ข้ามไป: "   + counts.skipped    + " ราย\n" +
+              "✅ ทำแล้ว: "    + counts.alreadyDone + " ราย";
 
-    if (approvedCount > 0) {
-      msg += "Database ได้รับการอัปเดตพิกัดจาก Driver GPS แล้วครับ";
-    } else {
-      msg += "ไม่มีรายการที่ติ๊ก Approve\nกรุณาติ๊ก Col H ก่อนรันครับ";
+    if (counts.conflict > 0) {
+      msg += "\n\n⚠️ พบ " + counts.conflict + " แถว CONFLICT\n" +
+             "กรุณาตรวจสอบและ reset checkbox ก่อนตัดสินใจใหม่ครับ";
     }
 
+    console.log("[applyApprovedFeedback] DONE — " + JSON.stringify(counts));
     ui.alert(msg);
 
-  } catch (e) {
-    console.error("applyApprovedFeedback Error: " + e.message);
+  } catch(e) {
+    console.error("[applyApprovedFeedback] Error: " + e.message);
     ui.alert("❌ เกิดข้อผิดพลาด: " + e.message);
   } finally {
     lock.releaseLock();
   }
 }
-
 
 function showGPSQueueStats() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
