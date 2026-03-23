@@ -128,6 +128,61 @@ const SCG_CONFIG = {
   }
 };
 
+// [Phase B NEW] เพิ่มใน SCG_CONFIG ต่อท้าย JSON_MAP
+// Data Sheet Column Index (0-based) สำหรับ Service_SCG.gs
+// แทน r[10], r[22], r[26] ที่กระจัดกระจาย
+const DATA_IDX = {
+  JOB_ID:        0,   // ID_งานประจำวัน
+  PLAN_DELIVERY: 1,   // PlanDelivery
+  INVOICE_NO:    2,   // InvoiceNo
+  SHIPMENT_NO:   3,   // ShipmentNo
+  DRIVER_NAME:   4,   // DriverName
+  TRUCK_LICENSE: 5,   // TruckLicense
+  CARRIER_CODE:  6,   // CarrierCode
+  CARRIER_NAME:  7,   // CarrierName
+  SOLD_TO_CODE:  8,   // SoldToCode
+  SOLD_TO_NAME:  9,   // SoldToName
+  SHIP_TO_NAME:  10,  // ShipToName
+  SHIP_TO_ADDR:  11,  // ShipToAddress
+  LATLNG_SCG:    12,  // LatLong_SCG
+  MATERIAL:      13,  // MaterialName
+  QTY:           14,  // ItemQuantity
+  QTY_UNIT:      15,  // QuantityUnit
+  WEIGHT:        16,  // ItemWeight
+  DELIVERY_NO:   17,  // DeliveryNo
+  DEST_COUNT:    18,  // จำนวนปลายทาง_System
+  DEST_LIST:     19,  // รายชื่อปลายทาง_System
+  SCAN_STATUS:   20,  // ScanStatus
+  DELIVERY_STATUS: 21, // DeliveryStatus
+  EMAIL:         22,  // Email พนักงาน
+  TOT_QTY:       23,  // จำนวนสินค้ารวมของร้านนี้
+  TOT_WEIGHT:    24,  // น้ำหนักสินค้ารวมของร้านนี้
+  SCAN_INV:      25,  // จำนวน_Invoice_ที่ต้องสแกน
+  LATLNG_ACTUAL: 26,  // LatLong_Actual
+  OWNER_LABEL:   27,  // ชื่อเจ้าของสินค้า_Invoice_ที่ต้องสแกน
+  SHOP_KEY:      28   // ShopKey
+};
+
+// [Phase D NEW] AI Field Column Index (ใน Database)
+// Phase D จะแยก AI keywords ออกจาก COL_NORMALIZED
+// ตอนนี้เพิ่ม constants ไว้ก่อน ใช้จริงเมื่อ migrate data
+const AI_CONFIG = {
+  // Confidence thresholds สำหรับ AI matching
+  THRESHOLD_AUTO_MAP:    90,  // >= 90 → append mapping ทันที
+  THRESHOLD_REVIEW:      70,  // 70-89 → ส่งเข้า review queue
+  THRESHOLD_IGNORE:      70,  // < 70  → ignore
+
+  // AI field tags
+  TAG_AI:       "[AI]",
+  TAG_REVIEWED: "[REVIEWED]",
+
+  // Prompt version tracking
+  PROMPT_VERSION: "v4.2",
+
+  // Candidate retrieval limit ก่อนส่ง AI
+  RETRIEVAL_LIMIT: 50
+};
+
 CONFIG.validateSystemIntegrity = function() {
   var ss     = SpreadsheetApp.getActiveSpreadsheet();
   var errors = [];
