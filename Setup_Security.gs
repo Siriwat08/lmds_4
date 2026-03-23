@@ -21,21 +21,21 @@
  */
 function setupEnvironment() {
   var ui = SpreadsheetApp.getUi();
-
+  
   var response = ui.prompt(
-    '🔐 Security Setup: Gemini API',
-    'กรุณากรอก Gemini API Key (ต้องขึ้นต้นด้วย AIza...):\nสามารถรับฟรีได้ที่ Google AI Studio',
+    '🔐 Security Setup: Gemini API', 
+    'กรุณากรอก Gemini API Key (ต้องขึ้นต้นด้วย AIza...):\nสามารถรับฟรีได้ที่ Google AI Studio', 
     ui.ButtonSet.OK_CANCEL
   );
 
   if (response.getSelectedButton() == ui.Button.OK) {
     var key = response.getResponseText().trim();
-
+    
     // [MODIFIED v4.0]: ตรวจสอบความถูกต้องของ Key ขั้นสูง
     if (key.length > 30 && key.startsWith("AIza")) {
       // Save to Script Properties (Hidden & Secure)
       PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', key);
-
+      
       ui.alert('✅ บันทึก API Key สำเร็จ!\nระบบ AI พร้อมใช้งานแล้วครับ');
       console.info("[Security Audit] User updated GEMINI_API_KEY.");
     } else {
@@ -58,8 +58,8 @@ function setupEnvironment() {
 function setupLineToken() {
   var ui = SpreadsheetApp.getUi();
   var response = ui.prompt(
-    '🔔 Setup: LINE Notify',
-    'กรุณากรอก LINE Notify Token ของกลุ่มที่ต้องการให้ระบบแจ้งเตือน:',
+    '🔔 Setup: LINE Notify', 
+    'กรุณากรอก LINE Notify Token ของกลุ่มที่ต้องการให้ระบบแจ้งเตือน:', 
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -81,7 +81,7 @@ function setupLineToken() {
 function setupTelegramConfig() {
   var ui = SpreadsheetApp.getUi();
   var props = PropertiesService.getScriptProperties();
-
+  
   var resBot = ui.prompt('✈️ Setup: Telegram', '1. กรุณากรอก Bot Token (เช่น 123456:ABC-DEF...):', ui.ButtonSet.OK_CANCEL);
   if (resBot.getSelectedButton() !== ui.Button.OK) return;
   var botToken = resBot.getResponseText().trim();
@@ -111,8 +111,8 @@ function setupTelegramConfig() {
 function resetEnvironment() {
   var ui = SpreadsheetApp.getUi();
   var response = ui.alert(
-    '⚠️ Danger Zone',
-    'คุณต้องการล้างรหัส API Key ของ Gemini ใช่หรือไม่?\n(ระบบจะลบเฉพาะ GEMINI_API_KEY เท่านั้น)',
+    '⚠️ Danger Zone', 
+    'คุณต้องการล้างรหัส API Key ของ Gemini ใช่หรือไม่?\n(ระบบจะลบเฉพาะ GEMINI_API_KEY เท่านั้น)', 
     ui.ButtonSet.YES_NO
   );
 
@@ -133,9 +133,9 @@ function checkCurrentKeyStatus() {
   var lineToken = props.getProperty('LINE_NOTIFY_TOKEN');
   var tgBot = props.getProperty('TG_BOT_TOKEN');
   var ui = SpreadsheetApp.getUi();
-
+  
   var statusMsg = "📊 **System Secrets Status**\n\n";
-
+  
   if (geminiKey) {
     statusMsg += "🟢 Gemini AI: READY (Ends with ..." + geminiKey.slice(-4) + ")\n";
   } else {
