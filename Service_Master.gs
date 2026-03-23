@@ -547,56 +547,114 @@ function assignMissingUUIDs() {
   }
 }
 
+/**
+ * [Phase A FIXED] repairNameMapping_Full()
+ * แก้ UUID fallback ที่ lookup จาก r[1] (UID column) ผิด → ใช้ variantName แทน
+ * เพิ่ม invalid row report แทนการสร้าง UUID ใหม่แบบ silent
+ */
 function repairNameMapping_Full() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var ui = SpreadsheetApp.getUi();
-  var dbSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  var ss       = SpreadsheetApp.getActiveSpreadsheet();
+  var ui       = SpreadsheetApp.getUi();
+  var dbSheet  = ss.getSheetByName(CONFIG.SHEET_NAME);
   var mapSheet = ss.getSheetByName(CONFIG.MAPPING_SHEET);
-  
-  var dbData = dbSheet.getRange(2, 1, getRealLastRow_(dbSheet, CONFIG.COL_NAME) - 1, CONFIG.COL_UUID).getValues();
+
+  if (!dbSheet || !mapSheet) {
+    ui.alert("❌ ไม่พบชีต Database หรือ NameMapping");
+    return;
+  }
+
+  console.log("[repairNameMapping_Full] START — Phase A Fixed");
+
+  // Step 1: สร้าง uuidMap จาก Database (normalizedName → UUID)
+  var dbLastRow = getRealLastRow_(dbSheet, CONFIG.COL_NAME);
+  var dbData    = (dbLastRow > 1)
+    ? dbSheet.getRange(2, 1, dbLastRow - 1, CONFIG.COL_UUID).getValues()
+    : [];
+
   var uuidMap = {};
   dbData.forEach(function(r) {
-    if (r[CONFIG.C_IDX.UUID]) {
-       uuidMap[normalizeText(r[CONFIG.C_IDX.NAME])] = r[CONFIG.C_IDX.UUID];
-    }
+    var name = r[CONFIG.C_IDX.NAME];
+    var uuid = r[CONFIG.C_IDX.UUID];
+    if (name && uuid) uuidMap[normalizeText(name)] = uuid;
   });
+  console.log("[repairNameMapping_Full] DB map: " + Object.keys(uuidMap).length + " entries");
 
-  var mapRange = mapSheet.getRange(2, 1, mapSheet.getLastRow() - 1, 5);
-  var mapValues = mapRange.getValues();
-  var cleanList = [];
-  var seen = new Set();
+  // Step 2: อ่าน NameMapping
+  var mapLastRow = mapSheet.getLastRow();
+  if (mapLastRow < 2) { ui.alert("ℹ️ NameMapping ว่างเปล่า"); return; }
 
-  mapValues.forEach(function(r) {
-    var oldN = r[CONFIG.MAP_IDX.VARIANT];
-    var uid = r[CONFIG.MAP_IDX.UID];
-    var conf = r[CONFIG.MAP_IDX.CONFIDENCE] || 100; 
-    var by = r[CONFIG.MAP_IDX.MAPPED_BY] || "System_Repair";
-    var ts = r[CONFIG.MAP_IDX.TIMESTAMP] || new Date();
-    
-    var normOld = normalizeText(oldN);
-    if (!normOld) return;
-    
-    if (!uid) uid = uuidMap[normalizeText(r[1])] || generateUUID();
-    
-    if (!seen.has(normOld)) {
-      seen.add(normOld);
-      var mapRow = new Array(5).fill("");
-      mapRow[CONFIG.MAP_IDX.VARIANT] = oldN;
-      mapRow[CONFIG.MAP_IDX.UID] = uid;
+  var mapValues   = mapSheet.getRange(2, 1, mapLastRow - 1, CONFIG.MAP_TOTAL_COLS).getValues();
+  var cleanList   = [];
+  var seen        = new Set();
+  var invalidRows = [];
+
+  mapValues.forEach(function(r, i) {
+    var variantName = r[CONFIG.MAP_IDX.VARIANT] ? r[CONFIG.MAP_IDX.VARIANT].toString().trim() : "";
+    var providedUid = r[CONFIG.MAP_IDX.UID]     ? r[CONFIG.MAP_IDX.UID].toString().trim()     : "";
+    var conf        = r[CONFIG.MAP_IDX.CONFIDENCE] || 100;
+    var mappedBy    = r[CONFIG.MAP_IDX.MAPPED_BY]  || "System_Repair";
+    var ts          = r[CONFIG.MAP_IDX.TIMESTAMP]  || new Date();
+
+    var normVariant = normalizeText(variantName);
+    if (!normVariant) return;
+
+    // [Phase A FIXED] UUID Resolution
+    // 1. ใช้ providedUid ถ้ามี
+    // 2. lookup จาก variantName → DB  (เดิม lookup จาก r[1] ผิด)
+    // 3. ถ้าไม่เจอ → mark invalid ไม่สร้าง UUID ใหม่
+    var resolvedUid = "";
+
+    if (providedUid) {
+      resolvedUid = providedUid;
+    } else {
+      resolvedUid = uuidMap[normVariant] || "";
+      if (resolvedUid) {
+        console.log("[repairNameMapping_Full] Auto-resolved: '" + variantName + "'");
+      } else {
+        invalidRows.push({ rowNum: i + 2, variant: variantName });
+        console.warn("[repairNameMapping_Full] INVALID row " + (i + 2) + ": '" + variantName + "'");
+        return;
+      }
+    }
+
+    if (!seen.has(normVariant)) {
+      seen.add(normVariant);
+      var mapRow = new Array(CONFIG.MAP_TOTAL_COLS).fill("");
+      mapRow[CONFIG.MAP_IDX.VARIANT]    = variantName;
+      mapRow[CONFIG.MAP_IDX.UID]        = resolvedUid;
       mapRow[CONFIG.MAP_IDX.CONFIDENCE] = conf;
-      mapRow[CONFIG.MAP_IDX.MAPPED_BY] = by;
-      mapRow[CONFIG.MAP_IDX.TIMESTAMP] = ts;
+      mapRow[CONFIG.MAP_IDX.MAPPED_BY]  = mappedBy;
+      mapRow[CONFIG.MAP_IDX.TIMESTAMP]  = ts;
       cleanList.push(mapRow);
     }
   });
 
+  // Step 3: เขียนกลับ
   if (cleanList.length > 0) {
-    mapSheet.getRange(2, 1, mapSheet.getLastRow(), 5).clearContent();
-    mapSheet.getRange(2, 1, cleanList.length, 5).setValues(cleanList);
-    ui.alert("✅ Repair Complete. Total Mappings: " + cleanList.length);
-  } else {
-    ui.alert("ℹ️ No repair needed or mapping is empty.");
+    mapSheet.getRange(2, 1, mapLastRow - 1, CONFIG.MAP_TOTAL_COLS).clearContent();
+    mapSheet.getRange(2, 1, cleanList.length, CONFIG.MAP_TOTAL_COLS).setValues(cleanList);
+    if (typeof clearSearchCache === 'function') clearSearchCache();
   }
+
+  // Step 4: Report
+  var report = "✅ Repair NameMapping สำเร็จ!\n\n" +
+               "📋 Valid mappings: " + cleanList.length + " rows\n" +
+               "❌ Invalid (หา UUID ไม่เจอ): " + invalidRows.length + " rows";
+
+  if (invalidRows.length > 0) {
+    report += "\n\n⚠️ แถวที่ต้องตรวจสอบมือ:\n";
+    invalidRows.slice(0, 10).forEach(function(inv) {
+      report += "  แถว " + inv.rowNum + ": " + inv.variant + "\n";
+    });
+    if (invalidRows.length > 10) {
+      report += "  ...และอีก " + (invalidRows.length - 10) + " รายการ";
+    }
+    report += "\n\n💡 เปิดชีต NameMapping แล้วเติม Master_UID ให้แถวเหล่านี้ครับ";
+  }
+
+  console.log("[repairNameMapping_Full] DONE — Valid: " + cleanList.length +
+              " | Invalid: " + invalidRows.length);
+  ui.alert(report);
 }
 
 function processClustering_GridOptimized() {
