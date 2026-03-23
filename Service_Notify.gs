@@ -23,10 +23,10 @@
  */
 function sendSystemNotify(message, isUrgent) {
   console.info(`[Notification Hub] Broadcasting message (Urgent: ${!!isUrgent})`);
-
+  
   // รันแบบขนาน (จำลองใน GAS โดยใช้ Try-Catch แยกกัน)
   // ป้องกันกรณีช่องทางใดช่องทางหนึ่งตาย แล้วพาลให้อีกช่องทางไม่ส่ง
-
+  
   try {
     sendLineNotify_Internal_(message, isUrgent);
   } catch (e) {
@@ -80,7 +80,7 @@ function sendLineNotify_Internal_(message, isUrgent) {
       "payload": { "message": fullMsg },
       "muteHttpExceptions": true
     });
-
+    
     if (response.getResponseCode() !== 200) {
       console.warn("[LINE API Error] " + response.getContentText());
     }
@@ -95,7 +95,7 @@ function sendLineNotify_Internal_(message, isUrgent) {
 function sendTelegramNotify_Internal_(message, isUrgent) {
   var token = PropertiesService.getScriptProperties().getProperty('TG_BOT_TOKEN'); // ใช้ Key ตาม Setup_Security V4.0
   var chatId = PropertiesService.getScriptProperties().getProperty('TG_CHAT_ID');  // ใช้ Key ตาม Setup_Security V4.0
-
+  
   // Fallback for V2.0 keys if still present
   if (!token) token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN');
   if (!chatId) chatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID');
@@ -121,7 +121,7 @@ function sendTelegramNotify_Internal_(message, isUrgent) {
       "payload": JSON.stringify(payload),
       "muteHttpExceptions": true
     });
-
+    
     if (response.getResponseCode() !== 200) {
       console.warn("[Telegram API Error] " + response.getContentText());
     }
@@ -152,14 +152,14 @@ function escapeHtml_(text) {
 function notifyAutoPilotStatus(scgStatus, aiCount, aiMappedCount) {
   // รองรับพารามิเตอร์ 3 ตัวเพื่อโชว์ผลลัพธ์ของ Tier 4 AI ด้วย
   var mappedMsg = aiMappedCount !== undefined ? `\n🎯 AI Tier-4 จับคู่สำเร็จ: ${aiMappedCount} ร้าน` : "";
-
+  
   var msg = "------------------\n" +
-    "✅ AutoPilot V4.0 รอบล่าสุด:\n" +
-    "📦 ดึงงาน SCG: " + scgStatus + "\n" +
-    "🧠 AI Indexing: " + aiCount + " รายการ" +
-    mappedMsg;
-
-  sendSystemNotify(msg, false);
+            "✅ AutoPilot V4.0 รอบล่าสุด:\n" +
+            "📦 ดึงงาน SCG: " + scgStatus + "\n" +
+            "🧠 AI Indexing: " + aiCount + " รายการ" + 
+            mappedMsg;
+            
+  sendSystemNotify(msg, false); 
 }
 
 
