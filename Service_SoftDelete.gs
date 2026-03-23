@@ -223,3 +223,60 @@ function showRecordStatusReport() {
     "รวม: " + (stats.active + stats.inactive + stats.merged + stats.noStatus) + " แถว"
   );
 }
+
+/**
+ * [Phase C NEW] buildUUIDStateMap_()
+ * โหลด UUID state ทั้งหมดจาก Database ครั้งเดียว
+ * ใช้ใน resolveUUID(), isActiveUUID_() เพื่อลด Sheets API calls
+ * เรียกจาก flow ที่ต้องตรวจ UUID หลายตัวพร้อมกัน
+ */
+function buildUUIDStateMap_() {
+  var ss      = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet   = ss.getSheetByName(CONFIG.SHEET_NAME);
+  var lastRow = getRealLastRow_(sheet, CONFIG.COL_NAME);
+  var map     = {};
+  if (lastRow < 2) return map;
+
+  var data = sheet.getRange(2, 1, lastRow - 1, CONFIG.DB_TOTAL_COLS).getValues();
+  data.forEach(function(row) {
+    var u = row[CONFIG.C_IDX.UUID];
+    if (u) {
+      map[u] = {
+        status:   row[CONFIG.C_IDX.RECORD_STATUS]  || "Active",
+        mergedTo: row[CONFIG.C_IDX.MERGED_TO_UUID] || ""
+      };
+    }
+  });
+  return map;
+}
+
+/**
+ * [Phase C NEW] resolveUUIDFromMap_()
+ * เหมือน resolveUUID() แต่รับ stateMap ที่โหลดไว้แล้ว
+ * ใช้เมื่อต้อง resolve UUID หลายตัวในรอบเดียวกัน ไม่ต้องอ่าน Sheet ซ้ำ
+ */
+function resolveUUIDFromMap_(uuid, stateMap) {
+  if (!uuid || !stateMap) return uuid;
+  var current  = uuid;
+  var maxHops  = 10;
+  var hopCount = 0;
+
+  while (hopCount < maxHops) {
+    var info = stateMap[current];
+    if (!info || info.status !== "Merged" || !info.mergedTo) break;
+    current = info.mergedTo;
+    hopCount++;
+  }
+  return current;
+}
+
+/**
+ * [Phase C NEW] isActiveFromMap_()
+ * ตรวจสถานะจาก stateMap ที่โหลดไว้แล้ว
+ */
+function isActiveFromMap_(uuid, stateMap) {
+  if (!uuid || !stateMap) return false;
+  var info = stateMap[uuid];
+  if (!info) return false;
+  return (info.status === "Active" || info.status === "");
+}
