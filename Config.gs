@@ -1,6 +1,6 @@
 /**
  * VERSION: 4.2 — Phase A
- * [Phase A] เพิ่ม DB_TOTAL_COLS, header constants
+ * [Phase A]  เพิ่ม DB_TOTAL_COLS, header constants
  */
 
 var CONFIG = {
