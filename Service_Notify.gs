@@ -1,5 +1,5 @@
 /**
- * VERSION: 000
+ * VERSION : 000
  * 🔔 Service: Omni-Channel Notification Hub (Enterprise Edition)
  * Version: 4.0 Centralized Broadcaster
  * หน้าที่: ศูนย์กลางส่งแจ้งเตือนสถานะระบบและ Error เข้า LINE และ Telegram
