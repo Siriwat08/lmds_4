@@ -1,5 +1,5 @@
 /**
- * VERSION: 4.2 — Phase D
+ * VERSION : 4.2 — Phase D
  * [Phase D] เพิ่ม retrieveCandidateMasters_() ก่อนส่ง AI
  * [Phase D] เพิ่ม confidence bands: auto-map / review / ignore
  * [Phase D] เพิ่ม AI audit logging
