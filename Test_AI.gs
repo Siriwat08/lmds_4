@@ -1,5 +1,5 @@
 /**
- * VERSION: 4.2 — Phase D
+ * VERSION : 4.2 — Phase D
  * [Phase D] เพิ่ม testRetrieveCandidates_(), testAIResponseValidation_()
  */
 
