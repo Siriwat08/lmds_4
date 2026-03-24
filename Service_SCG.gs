@@ -1,5 +1,5 @@
 /**
- * VERSION: 000
+ * VERSION : 000
  * 📦 Service: SCG Operation (Enterprise Edition)
  * Version: 5.0 ScanDocs + Summary Readiness
  * ---------------------------------------------------------
