@@ -1,5 +1,5 @@
 /**
- * VERSION: 000
+ * VERSION : 000
  * 🛠️ Utilities: Common Helper Functions
  * Version: 4.0 Enterprise Edition (AI & Batch Preparedness)
  * ------------------------------------------------------
