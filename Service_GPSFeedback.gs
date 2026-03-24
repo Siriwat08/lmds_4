@@ -2,7 +2,7 @@ function createGPSQueueSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ui = SpreadsheetApp.getUi();
   
-  // เช็คว่ามีอยู่แล้วไหม
+  //  เช็คว่ามีอยู่แล้วไหม
   if (ss.getSheetByName(SCG_CONFIG.SHEET_GPS_QUEUE)) {
     ui.alert("ℹ️ ชีต GPS_Queue มีอยู่แล้วครับ");
     return;
