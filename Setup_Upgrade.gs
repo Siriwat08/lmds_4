@@ -1,5 +1,5 @@
 /**
- * VERSION: 000
+ * VERSION : 000
  * 🛠️ System Upgrade Tool (Enterprise Edition)
  * Version: 4.0 Omni-Schema Upgrader
  * -----------------------------------------------------------------
