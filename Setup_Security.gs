@@ -1,5 +1,5 @@
 /**
- * VERSION: 000
+ * VERSION : 000
  * 🔐 Security Setup Utility (Enterprise Edition)
  * Version: 4.0 Omni-Vault (Safe Storage & Validation)
  * -----------------------------------------------------------------
