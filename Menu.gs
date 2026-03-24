@@ -1,6 +1,6 @@
 /**
  * VERSION: 000
- * 🖥️ MODULE: Menu UI Interface
+ * 🖥️ MODULE : Menu UI Interface
  * Version: 4.1 Enterprise Edition (UI Text Fix)
  * ---------------------------------------------------
  * [FIXED v4.1]: Dynamic UI Alert pulling exact sheet names from CONFIG.
