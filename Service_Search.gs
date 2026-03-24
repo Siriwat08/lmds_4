@@ -1,5 +1,5 @@
 /**
- * VERSION: 4.2 — Phase B
+ * VERSION : 4.2 — Phase B
  * [Phase B] อ่าน full DB width (DB_TOTAL_COLS)
  * [Phase B FIXED] แก้ bug return → continue ใน for loop
  * [Phase B] exclude Inactive/Merged อย่างถูกต้อง
