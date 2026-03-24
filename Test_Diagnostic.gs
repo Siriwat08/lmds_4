@@ -1,5 +1,5 @@
 /**
- * VERSION: 4.2 — Phase E
+ * VERSION : 4.2 — Phase E
  * [Phase E] แยก diagnostics core คืน object
  * [Phase E] เพิ่ม runDryRunMappingConflicts(), runDryRunUUIDIntegrity()
  */
