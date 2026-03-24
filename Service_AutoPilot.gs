@@ -1,5 +1,5 @@
 /**
- * VERSION: 4.2 — Phase D
+ * VERSION : 4.2 — Phase D
  * [Phase D] เพิ่ม parse guard, prompt versioning, AI response logging
  * [Phase D] แยก concern: normalization (deterministic) vs AI enrichment (probabilistic)
  */
